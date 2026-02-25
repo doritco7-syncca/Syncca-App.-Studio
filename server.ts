@@ -49,7 +49,8 @@ app.get("/api/health", (req, res) => {
   res.json({ 
     status: "ok", 
     mode: process.env.NODE_ENV || "development",
-    airtableConfigured: !!(process.env.AIRTABLE_API_KEY && process.env.AIRTABLE_BASE_ID)
+    airtableConfigured: !!(process.env.AIRTABLE_API_KEY && process.env.AIRTABLE_BASE_ID),
+    geminiConfigured: !!(process.env.GEMINI_API_KEY || process.env.API_KEY)
   });
 });
 
@@ -215,6 +216,66 @@ app.post("/api/logs", async (req, res) => {
       error: "Failed to log conversation", 
       details: error.message
     });
+  }
+});
+app.post("/api/chat", async (req, res) => {
+  console.log("Received chat request");
+  try {
+    const { message, history, userName, savedConcepts } = req.body;
+    
+    // Try all possible environment variable names for the Gemini key
+    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || process.env.VITE_GEMINI_API_KEY;
+
+    if (!apiKey || apiKey === "undefined" || apiKey.length < 10) {
+      console.error("Gemini API key is missing or invalid format");
+      return res.status(500).json({ 
+        error: "AI configuration missing on server. Please ensure GEMINI_API_KEY is set correctly in Vercel settings." 
+      });
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+    
+    // Fetch lexicon for context
+    const base = getBase();
+    let lexicon = [];
+    if (base) {
+      try {
+        const records = await base(AIRTABLE_SCHEMA.lexicon.tableName).select().all();
+        lexicon = records.map(record => ({
+          hebrew_term: record.get(AIRTABLE_SCHEMA.lexicon.columns.hebrew_term),
+          term: record.get(AIRTABLE_SCHEMA.lexicon.columns.term),
+          definition_he: record.get(AIRTABLE_SCHEMA.lexicon.columns.definition_he)
+        }));
+      } catch (e) {
+        console.warn("Lexicon fetch failed for chat context");
+      }
+    }
+
+    const nameContext = userName ? `\nUSER_NAME: ${userName}\n` : "";
+    const lexiconContext = lexicon.length > 0
+      ? `\nKNOWLEDGE BASE:\n${lexicon.map(l => `- [[${l.hebrew_term}]]: ${l.definition_he}`).join('\n')}\n`
+      : "";
+
+    const chat = ai.chats.create({
+      model: "gemini-3-flash-preview",
+      config: {
+        systemInstruction: nameContext + lexiconContext + AIRTABLE_SCHEMA.systemInstruction,
+      },
+      history: history || []
+    });
+
+    const response = await chat.sendMessage({ message });
+    res.json({ text: response.text });
+  } catch (error: any) {
+    console.error("Gemini Proxy Error:", error);
+    // If it's a JSON error from Google, try to parse it for a cleaner message
+    let errorMessage = error.message;
+    try {
+      const parsed = JSON.parse(error.message);
+      if (parsed.error && parsed.error.message) errorMessage = parsed.error.message;
+    } catch (e) {}
+    
+    res.status(500).json({ error: errorMessage });
   }
 });
 
