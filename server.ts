@@ -6,7 +6,7 @@ import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { AIRTABLE_SCHEMA } from "./src/airtableSchema.ts";
+import { AIRTABLE_SCHEMA } from "./src/airtableSchema";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -265,18 +265,34 @@ app.post("/api/chat", async (req, res) => {
     });
 
     const response = await chat.sendMessage({ message });
+    if (!response || !response.text) {
+      throw new Error("No response text from Gemini");
+    }
     res.json({ text: response.text });
   } catch (error: any) {
     console.error("Gemini Proxy Error:", error);
-    // If it's a JSON error from Google, try to parse it for a cleaner message
-    let errorMessage = error.message;
-    try {
-      const parsed = JSON.parse(error.message);
-      if (parsed.error && parsed.error.message) errorMessage = parsed.error.message;
-    } catch (e) {}
     
-    res.status(500).json({ error: errorMessage });
+    // Detailed error logging for Vercel
+    const errorInfo = {
+      message: error.message,
+      stack: error.stack,
+      type: error.constructor.name
+    };
+    
+    res.status(500).json({ 
+      error: error.message || "An unknown error occurred on the AI server",
+      details: process.env.NODE_ENV === "development" ? errorInfo : undefined
+    });
   }
+});
+
+// Global Error Handler
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error("Unhandled Server Error:", err);
+  res.status(500).json({ 
+    error: "Internal Server Error", 
+    message: err.message 
+  });
 });
 
 // Vite middleware for development
@@ -304,7 +320,7 @@ async function startServer() {
     });
   } else {
     console.log("Serving static files from dist");
-    const distPath = path.resolve(__dirname, "dist");
+    const distPath = path.resolve(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       if (req.url.startsWith('/api')) return res.status(404).json({ error: "API route not found" });

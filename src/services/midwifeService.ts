@@ -42,8 +42,15 @@ export class MidwifeService {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Server error');
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Server error');
+        } else {
+          const errorText = await response.text();
+          console.error("Non-JSON error from server:", errorText);
+          throw new Error(`Server error: ${response.status} ${response.statusText}`);
+        }
       }
 
       const data = await response.json();
