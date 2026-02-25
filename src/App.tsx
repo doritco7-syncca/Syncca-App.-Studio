@@ -354,18 +354,15 @@ export default function App() {
       });
       
       if (!response.ok) {
-        const err = await response.json();
-        console.error("Airtable logging failed:", err);
+        const errorText = await response.text();
+        console.error("Airtable logging failed:", errorText);
         // Silently fail in background, don't interrupt user
       } else {
         console.log("Airtable logging successful");
-        if (fullTranscript === "Manual Test Log") {
-          alert("הלוג נשלח בהצלחה לאיירטייבל!");
-        }
       }
     } catch (e: any) {
       console.error("Failed to log to Airtable", e);
-      alert(`שגיאת תקשורת ברישום לוג: ${e.message}`);
+      // No alert here to keep the experience smooth
     }
   };
 

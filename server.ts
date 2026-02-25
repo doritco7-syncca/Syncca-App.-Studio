@@ -182,7 +182,10 @@ app.post("/api/users/:userId/fields", async (req, res) => {
 app.post("/api/logs", async (req, res) => {
   try {
     const base = getBase();
-    if (!base) throw new Error("Airtable not configured");
+    if (!base) {
+      console.error("Airtable Base not initialized for logs. Check Environment Variables.");
+      return res.status(500).send("Airtable configuration missing on server");
+    }
     
     const { userId, transcript, conceptsApplied, selfReview, cortexShift } = req.body;
     const tableName = AIRTABLE_SCHEMA.logs.tableName;
