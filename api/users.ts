@@ -1,5 +1,30 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getBase, AIRTABLE_SCHEMA } from './_lib';
+import Airtable from "airtable";
+
+const AIRTABLE_SCHEMA = {
+  users: {
+    tableName: "Users",
+    columns: {
+      username: "Username",
+      fullName: "full name",
+      firstName: "first name",
+      learnedConcepts: "Relationship_Lexicon",
+      insights: "Insights",
+      intention: "Intention",
+      feedback: "Feedback",
+      maritalStatus: "marital status",
+      ageRange: "Age Range",
+      gender: "Gender"
+    }
+  }
+};
+
+const getBase = () => {
+  const apiKey = process.env.AIRTABLE_API_KEY || process.env.VITE_AIRTABLE_API_KEY;
+  const baseId = process.env.AIRTABLE_BASE_ID || process.env.VITE_AIRTABLE_BASE_ID;
+  if (!apiKey || !baseId) return null;
+  return new Airtable({ apiKey, requestTimeout: 5000 }).base(baseId);
+};
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');

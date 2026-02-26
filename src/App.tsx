@@ -71,58 +71,24 @@ export default function App() {
     const fetchLexicon = async () => {
       try {
         const res = await fetch('/api/lexicon');
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.message || errorData.error || `Server error: ${res.status}`);
+        if (res.ok) {
+          const data = await res.json();
+          setLexicon(data);
+          console.log("Lexicon loaded silently:", data.length, "terms");
         }
-        const data = await res.json();
-        setLexicon(data);
-        console.log("Lexicon loaded in App:", data.length, "terms");
       } catch (e: any) {
-        console.error("Failed to fetch lexicon", e);
+        console.warn("Initial lexicon fetch failed (silent):", e.message);
       }
     };
-    fetchLexicon();
+    // Small delay to allow environment to stabilize
+    const timer = setTimeout(fetchLexicon, 1500);
+    return () => clearTimeout(timer);
   }, []);
 
+  // Remove the automatic initUser useEffect that was creating guest records on every load
   useEffect(() => {
-    const initUser = async () => {
-      if (!userIdRef.current) {
-        let guestEmail = localStorage.getItem('midwife_guest_email');
-        if (!guestEmail) {
-          guestEmail = `guest_${Math.random().toString(36).substring(7)}@temp.com`;
-          localStorage.setItem('midwife_guest_email', guestEmail);
-        }
-        
-        try {
-          const res = await fetch('/api/users', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: guestEmail, fullName: 'אורח זמני' })
-          });
-          
-          if (!res.ok) {
-            const errorData = await res.json().catch(() => ({}));
-            throw new Error(errorData.message || errorData.error || `Server error: ${res.status}`);
-          }
-          
-          const data = await res.json();
-          userIdRef.current = data.id;
-          setCurrentUser({ id: data.id, name: 'אורח', username: guestEmail, fields: data.fields });
-          console.log("User initialized:", data.id);
-        } catch (e: any) {
-          console.error("Failed to init user", e);
-          // Show error in chat so user knows why it's failing
-          setMessages([{
-            id: 'error-init',
-            role: 'assistant',
-            content: `שגיאת מערכת: ${e.message}. אנא וודאו שכל משתני הסביבה (Airtable) מוגדרים בוורסל.`,
-            timestamp: new Date()
-          }]);
-        }
-      }
-    };
-    initUser();
+    // We only initialize the user now when they actually click "Start" or "Continue as Guest"
+    console.log("App loaded. Waiting for user identification...");
   }, []);
 
   useEffect(() => {
@@ -195,12 +161,14 @@ export default function App() {
           const termWithBrackets = part;
           const rawTerm = part.slice(2, -2).trim();
           
-          // Helper to normalize Hebrew terms (removing "ה" prefix and underscores for matching)
+          // Helper to normalize terms for matching
           const normalize = (str: string) => {
             if (!str) return '';
-            // Replace underscores with spaces and lowercase
-            let s = str.trim().toLowerCase().replace(/_/g, ' ');
-            return s;
+            return str.trim()
+              .toLowerCase()
+              .replace(/_/g, ' ') // Underscores to spaces
+              .replace(/^[הבכלמ]/, '') // Remove common Hebrew prefixes (ה, ב, כ, ל, מ)
+              .replace(/\s+/g, ' '); // Normalize multiple spaces
           };
 
           const term = normalize(rawTerm);
@@ -209,20 +177,19 @@ export default function App() {
             const hTerm = normalize(l.hebrew_term || '');
             const eTerm = normalize(l.term || '');
             
-            // Try exact match first
+            // Try exact match on normalized strings
             if (hTerm === term || eTerm === term) return true;
             
-            // Try matching without "ה" prefix in Hebrew
-            if (term.startsWith('ה') && hTerm === term.substring(1)) return true;
-            if (hTerm.startsWith('ה') && hTerm.substring(1) === term) return true;
+            // Try matching the raw term too just in case
+            if (normalize(l.hebrew_term || '') === normalize(rawTerm)) return true;
             
             return false;
           });
           
           if (concept) {
             const isSaved = savedConcepts.some(c => c.id === concept.id);
-            const displayTerm = rawTerm; // Keep the AI's original wording
-            const displayDefinition = concept.definition_he || concept.definition_en || concept.definition || 'אין הגדרה זמינה';
+            const displayTerm = rawTerm;
+            const displayDefinition = concept.definition_he || concept.definition_en || 'אין הגדרה זמינה';
 
             return (
               <span 
@@ -392,7 +359,8 @@ export default function App() {
           transcript: fullTranscript,
           conceptsApplied: '', 
           selfReview: '',
-          cortexShift: ''
+          cortexShift: '',
+          timestamp: new Date().toISOString()
         })
       });
       
