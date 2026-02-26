@@ -20,7 +20,7 @@ interface Message {
 }
 
 const Logo = () => (
-  <svg viewBox="0 0 100 100" className="w-14 h-14 md:w-16 md:h-16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <svg viewBox="0 0 100 100" className="w-14 h-14 md:w-16 md:h-16 rotate-180" fill="none" xmlns="http://www.w3.org/2000/svg">
     {/* Outer Crescent - Orange-Red */}
     <path 
       d="M25 20C15 30 10 45 10 60C10 82 28 100 50 100C72 100 90 82 90 60C90 45 85 30 75 20C82 30 85 42 85 55C85 75 70 90 50 90C30 90 15 75 15 55C15 42 18 30 25 20Z" 
@@ -51,6 +51,11 @@ export default function App() {
   const [userInsights, setUserInsights] = useState('');
   const [userIntention, setUserIntention] = useState('');
   const [userFeedback, setUserFeedback] = useState('');
+  const [userFullName, setUserFullName] = useState('');
+  const [userFirstName, setUserFirstName] = useState('');
+  const [userMaritalStatus, setUserMaritalStatus] = useState('');
+  const [userAgeRange, setUserAgeRange] = useState('');
+  const [userGender, setUserGender] = useState('');
   const [showBetaWelcome, setShowBetaWelcome] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackInput, setFeedbackInput] = useState('');
@@ -167,8 +172,10 @@ export default function App() {
             return str.trim()
               .toLowerCase()
               .replace(/_/g, ' ') // Underscores to spaces
-              .replace(/^[הבכלמ]/, '') // Remove common Hebrew prefixes (ה, ב, כ, ל, מ)
-              .replace(/\s+/g, ' '); // Normalize multiple spaces
+              .replace(/\s+/g, ' ') // Normalize multiple spaces
+              .split(' ')
+              .map(word => word.replace(/^[הבכלמ]/, '')) // Remove common Hebrew prefixes from each word
+              .join(' ');
           };
 
           const term = normalize(rawTerm);
@@ -307,6 +314,11 @@ export default function App() {
       setUserInsights(userData.fields?.[AIRTABLE_SCHEMA.users.columns.insights] || '');
       setUserIntention(userData.fields?.[AIRTABLE_SCHEMA.users.columns.intention] || '');
       setUserFeedback(userData.fields?.[AIRTABLE_SCHEMA.users.columns.feedback] || '');
+      setUserFullName(userData.fields?.[AIRTABLE_SCHEMA.users.columns.fullName] || '');
+      setUserFirstName(userData.fields?.[AIRTABLE_SCHEMA.users.columns.firstName] || '');
+      setUserMaritalStatus(userData.fields?.[AIRTABLE_SCHEMA.users.columns.maritalStatus] || '');
+      setUserAgeRange(userData.fields?.[AIRTABLE_SCHEMA.users.columns.ageRange] || '');
+      setUserGender(userData.fields?.[AIRTABLE_SCHEMA.users.columns.gender] || '');
 
       // Extract saved concepts from user data to pass to midwife
       const learnedIds = userData.fields?.[AIRTABLE_SCHEMA.users.columns.learnedConcepts] || [];
@@ -350,7 +362,7 @@ export default function App() {
       return;
     }
     try {
-      console.log("Attempting to log to Airtable...");
+      console.log("Attempting to log to Airtable for user:", userIdRef.current);
       const response = await fetch('/api/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -365,15 +377,13 @@ export default function App() {
       });
       
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Airtable logging failed:", errorText);
-        // Silently fail in background, don't interrupt user
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Airtable logging failed server-side:", errorData);
       } else {
         console.log("Airtable logging successful");
       }
     } catch (e: any) {
-      console.error("Failed to log to Airtable", e);
-      // No alert here to keep the experience smooth
+      console.error("Failed to call logging API:", e);
     }
   };
 
@@ -455,7 +465,7 @@ export default function App() {
   if (!isSessionActive) {
     if (showSignUp) {
       return (
-        <div className="min-h-screen bg-[#f5f2ed] flex items-center justify-center p-4 font-sans" dir="rtl">
+        <div className="min-h-screen bg-[#e5e1d8] flex items-center justify-center p-4 font-sans" dir="rtl">
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -532,7 +542,7 @@ export default function App() {
     }
 
     return (
-      <div className="min-h-screen bg-[#f5f2ed] flex items-center justify-center p-4 font-sans" dir="rtl">
+      <div className="min-h-screen bg-[#e5e1d8] flex items-center justify-center p-4 font-sans" dir="rtl">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -571,7 +581,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f2ed] flex flex-col font-sans" dir="rtl">
+    <div className="min-h-screen bg-[#e5e1d8] flex flex-col font-sans" dir="rtl">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-md border-b border-orange-100 sticky top-0 z-50 px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
@@ -626,7 +636,7 @@ export default function App() {
                   : "bg-white text-[#1a1a1a] rounded-tl-none border border-orange-100"
               )}>
                 <div className="flex items-center gap-2 mb-1 opacity-50 text-[10px] uppercase tracking-wider font-mono">
-                  {msg.role === 'user' ? <User className="w-3 h-3" /> : <Activity className="w-3 h-3" />}
+                  {msg.role === 'user' ? <User className="w-3 h-3" /> : <div className="w-3 h-3"><Logo /></div>}
                   {msg.role === 'user' ? 'אני' : 'Syncca'}
                 </div>
                 <div className="prose prose-sm max-w-none prose-p:leading-relaxed prose-p:my-1 text-inherit">
@@ -654,13 +664,13 @@ export default function App() {
             animate={{ opacity: 1 }}
             className="flex justify-start"
           >
-            <div className="bg-orange-50 p-4 rounded-2xl rounded-tl-none flex flex-col gap-2 border border-orange-100/50">
+            <div className="bg-blue-50 p-4 rounded-2xl rounded-tl-none flex flex-col gap-2 border border-blue-100/50">
               <div className="flex gap-1">
-                <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-bounce"></span>
+                <span className="w-1.5 h-1.5 bg-blue-900 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                <span className="w-1.5 h-1.5 bg-blue-900 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                <span className="w-1.5 h-1.5 bg-blue-900 rounded-full animate-bounce"></span>
               </div>
-              <span className="text-[10px] text-orange-600 font-mono animate-pulse">מנקה רעשים לימביים ומסנכרנת...</span>
+              <span className="text-[10px] text-blue-900 font-mono animate-pulse">רגע, מתארגנת על עצמי...</span>
             </div>
           </motion.div>
         )}
@@ -689,7 +699,7 @@ export default function App() {
                     initial={{ scale: 0.8, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     onClick={() => setSelectedConcept(concept)}
-                    className="group relative bg-orange-50 border border-orange-100 rounded-full px-4 py-1.5 flex items-center gap-2 pr-8 cursor-pointer hover:bg-orange-100 transition-colors"
+                    className="group relative bg-blue-50 border border-blue-100 rounded-full px-4 py-1.5 flex items-center gap-2 pr-8 cursor-pointer hover:bg-blue-100 transition-colors"
                   >
                     <span className="text-xs font-medium text-[#1a1a1a]">{concept.hebrew_term || concept.term}</span>
                     <button 
@@ -697,15 +707,15 @@ export default function App() {
                         e.stopPropagation();
                         toggleSaveConcept(concept);
                       }}
-                      className="absolute left-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-orange-200 rounded-full"
+                      className="absolute left-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-blue-200 rounded-full"
                     >
-                      <X className="w-3 h-3 text-orange-400" />
+                      <X className="w-3 h-3 text-blue-400" />
                     </button>
                     
                     {/* Desktop Tooltip for saved concept */}
-                    <div className="hidden md:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-white text-[#1a1a1a] text-xs rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible pointer-events-none z-50 border border-orange-200 leading-relaxed whitespace-normal">
-                      <strong className="block mb-1 text-orange-800 font-bold">{concept.hebrew_term || concept.term}</strong>
-                      <span className="text-orange-700 block">{concept.definition || concept.definition_he || concept.definition_en || 'אין הגדרה זמינה'}</span>
+                    <div className="hidden md:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-white text-[#1a1a1a] text-xs rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible pointer-events-none z-50 border border-blue-200 leading-relaxed whitespace-normal">
+                      <strong className="block mb-1 text-blue-900 font-bold">{concept.hebrew_term || concept.term}</strong>
+                      <span className="text-blue-700 block">{concept.definition || concept.definition_he || concept.definition_en || 'אין הגדרה זמינה'}</span>
                       <span className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-white"></span>
                     </div>
                   </motion.div>
@@ -760,30 +770,30 @@ export default function App() {
               className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-2xl overflow-hidden flex flex-col relative"
               onClick={(e) => e.stopPropagation()}
             >
-              <header className="p-6 border-b border-orange-100 flex items-center justify-between bg-orange-50/30">
+              <header className="p-6 border-b border-blue-100 flex items-center justify-between bg-blue-50/30">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                    <User className="text-orange-600 w-5 h-5" />
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                    <User className="text-blue-900 w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="text-xl font-serif text-[#1e3a8a]">
                       {currentUser?.name && currentUser.name !== 'משתמש' ? `המרחב של ${currentUser.name}` : 'המרחב האישי שלי'}
                     </h3>
-                    <p className="text-xs text-orange-500 font-mono">{currentUser?.username}</p>
+                    <p className="text-xs text-blue-700 font-mono">{currentUser?.username}</p>
                   </div>
                 </div>
                 <button 
                   onClick={() => setShowMemberArea(false)}
-                  className="p-2 hover:bg-orange-100 rounded-full transition-colors"
+                  className="p-2 hover:bg-blue-100 rounded-full transition-colors"
                 >
-                  <X className="w-5 h-5 text-orange-400" />
+                  <X className="w-5 h-5 text-blue-400" />
                 </button>
               </header>
 
               <div className="flex-1 overflow-y-auto p-6 space-y-8">
                 {/* My Terms */}
                 <section>
-                  <div className="flex items-center gap-2 mb-4 text-xs font-mono uppercase tracking-widest text-orange-600 font-bold">
+                  <div className="flex items-center gap-2 mb-4 text-xs font-mono uppercase tracking-widest text-blue-900 font-bold">
                     <Bookmark className="w-4 h-4" />
                     מילון המושגים שלי
                   </div>
@@ -793,21 +803,113 @@ export default function App() {
                         <div 
                           key={concept.id}
                           onClick={() => setSelectedConcept(concept)}
-                          className="bg-orange-50 border border-orange-100 rounded-full px-4 py-2 text-sm font-medium text-orange-700 cursor-pointer hover:bg-orange-100 hover:border-orange-200 transition-all"
+                          className="bg-blue-50 border border-blue-100 rounded-full px-4 py-2 text-sm font-medium text-blue-900 cursor-pointer hover:bg-blue-100 hover:border-blue-200 transition-all"
                         >
                           {concept.hebrew_term || concept.term}
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-orange-400 text-sm italic">טרם שמרת מושגים בשיחה זו.</p>
+                    <p className="text-blue-400 text-sm italic">טרם שמרת מושגים בשיחה זו.</p>
                   )}
+                </section>
+
+                {/* Personal Details */}
+                <section className="grid md:grid-cols-2 gap-6">
+                  <div>
+                    <div className="flex items-center gap-2 mb-4 text-xs font-mono uppercase tracking-widest text-blue-900 font-bold">
+                      <User className="w-4 h-4" />
+                      שם מלא
+                    </div>
+                    <input 
+                      type="text"
+                      value={userFullName}
+                      onChange={(e) => setUserFullName(e.target.value)}
+                      onBlur={() => updateUserField('fullName', userFullName)}
+                      placeholder="השם המלא שלך..."
+                      className="w-full bg-blue-50 border-none rounded-2xl p-4 text-sm text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-4 text-xs font-mono uppercase tracking-widest text-blue-900 font-bold">
+                      <User className="w-4 h-4" />
+                      שם פרטי
+                    </div>
+                    <input 
+                      type="text"
+                      value={userFirstName}
+                      onChange={(e) => setUserFirstName(e.target.value)}
+                      onBlur={() => {
+                        updateUserField('firstName', userFirstName);
+                        setCurrentUser(prev => prev ? { ...prev, name: userFirstName } : null);
+                      }}
+                      placeholder="השם הפרטי שלך..."
+                      className="w-full bg-blue-50 border-none rounded-2xl p-4 text-sm text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+                </section>
+
+                <section className="grid md:grid-cols-3 gap-6">
+                  <div>
+                    <div className="flex items-center gap-2 mb-4 text-xs font-mono uppercase tracking-widest text-blue-900 font-bold">
+                      <Heart className="w-4 h-4" />
+                      מצב משפחתי
+                    </div>
+                    <input 
+                      type="text"
+                      value={userMaritalStatus}
+                      onChange={(e) => setUserMaritalStatus(e.target.value)}
+                      onBlur={() => updateUserField('maritalStatus', userMaritalStatus)}
+                      placeholder="למשל: נשוי/אה, בזוגיות..."
+                      className="w-full bg-blue-50 border-none rounded-2xl p-4 text-sm text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-4 text-xs font-mono uppercase tracking-widest text-blue-900 font-bold">
+                      <Activity className="w-4 h-4" />
+                      טווח גילאים
+                    </div>
+                    <select 
+                      value={userAgeRange}
+                      onChange={(e) => {
+                        setUserAgeRange(e.target.value);
+                        updateUserField('ageRange', e.target.value);
+                      }}
+                      className="w-full bg-blue-50 border-none rounded-2xl p-4 text-sm text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+                    >
+                      <option value="">בחר טווח גילאים...</option>
+                      <option value="18-25">18-25</option>
+                      <option value="26-35">26-35</option>
+                      <option value="36-45">36-45</option>
+                      <option value="46-60">46-60</option>
+                      <option value="60+">60+</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-4 text-xs font-mono uppercase tracking-widest text-blue-900 font-bold">
+                      <User className="w-4 h-4" />
+                      מגדר
+                    </div>
+                    <select 
+                      value={userGender}
+                      onChange={(e) => {
+                        setUserGender(e.target.value);
+                        updateUserField('gender', e.target.value);
+                      }}
+                      className="w-full bg-blue-50 border-none rounded-2xl p-4 text-sm text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+                    >
+                      <option value="">בחר מגדר...</option>
+                      <option value="זכר">זכר</option>
+                      <option value="נקבה">נקבה</option>
+                      <option value="אחר">אחר</option>
+                    </select>
+                  </div>
                 </section>
 
                 {/* My Insights & Intention */}
                 <section className="grid md:grid-cols-2 gap-6">
                   <div>
-                    <div className="flex items-center gap-2 mb-4 text-xs font-mono uppercase tracking-widest text-orange-600 font-bold">
+                    <div className="flex items-center gap-2 mb-4 text-xs font-mono uppercase tracking-widest text-blue-900 font-bold">
                       <PenTool className="w-4 h-4" />
                       התכוונות (מטרה)
                     </div>
@@ -816,11 +918,11 @@ export default function App() {
                       onChange={(e) => setUserIntention(e.target.value)}
                       onBlur={() => updateUserField('intention', userIntention)}
                       placeholder="מה המטרה שחשובה לך לעבוד עליה?"
-                      className="w-full bg-orange-50 border-none rounded-2xl p-4 text-sm text-orange-700 focus:ring-2 focus:ring-orange-500 outline-none h-32 resize-none leading-relaxed"
+                      className="w-full bg-blue-50 border-none rounded-2xl p-4 text-sm text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none h-32 resize-none leading-relaxed"
                     />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2 mb-4 text-xs font-mono uppercase tracking-widest text-orange-600 font-bold">
+                    <div className="flex items-center gap-2 mb-4 text-xs font-mono uppercase tracking-widest text-blue-900 font-bold">
                       <Sparkles className="w-4 h-4" />
                       תובנות שלי
                     </div>
@@ -829,14 +931,14 @@ export default function App() {
                       onChange={(e) => setUserInsights(e.target.value)}
                       onBlur={() => updateUserField('insights', userInsights)}
                       placeholder="מה גילית על עצמך היום?"
-                      className="w-full bg-orange-50 border-none rounded-2xl p-4 text-sm text-orange-700 focus:ring-2 focus:ring-orange-500 outline-none h-32 resize-none leading-relaxed"
+                      className="w-full bg-blue-50 border-none rounded-2xl p-4 text-sm text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none h-32 resize-none leading-relaxed"
                     />
                   </div>
                 </section>
 
                 {/* My Voice (Feedback) */}
                 <section>
-                  <div className="flex items-center gap-2 mb-4 text-xs font-mono uppercase tracking-widest text-orange-600 font-bold">
+                  <div className="flex items-center gap-2 mb-4 text-xs font-mono uppercase tracking-widest text-blue-900 font-bold">
                     <MessageSquare className="w-4 h-4" />
                     הקול שלי (פידבק)
                   </div>
@@ -845,13 +947,13 @@ export default function App() {
                     onChange={(e) => setUserFeedback(e.target.value)}
                     onBlur={() => updateUserField('feedback', userFeedback)}
                     placeholder="נשמח לשמוע הצעות לשיפור או פידבק על החוויה שלך..."
-                    className="w-full bg-orange-50 border-none rounded-2xl p-4 text-sm text-orange-700 focus:ring-2 focus:ring-orange-500 outline-none h-24 resize-none leading-relaxed"
+                    className="w-full bg-blue-50 border-none rounded-2xl p-4 text-sm text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none h-24 resize-none leading-relaxed"
                   />
                 </section>
               </div>
 
-              <footer className="p-6 border-t border-orange-100 bg-orange-50/50 flex justify-between items-center">
-                <div className="text-[10px] text-orange-400 font-mono uppercase tracking-wider">
+              <footer className="p-6 border-t border-blue-100 bg-blue-50/50 flex justify-between items-center">
+                <div className="text-[10px] text-blue-400 font-mono uppercase tracking-wider">
                   Syncca Beta v1.0
                 </div>
                 <button 
@@ -881,28 +983,28 @@ export default function App() {
               onClick={(e) => e.stopPropagation()}
             >
               {/* Handle for mobile bottom sheet */}
-              <div className="w-12 h-1.5 bg-orange-200 rounded-full mx-auto mb-6 md:hidden"></div>
+              <div className="w-12 h-1.5 bg-blue-200 rounded-full mx-auto mb-6 md:hidden"></div>
               
               <button 
                 onClick={() => setSelectedConcept(null)}
-                className="absolute left-4 top-4 md:left-6 md:top-6 p-2 hover:bg-orange-100 rounded-full transition-colors"
+                className="absolute left-4 top-4 md:left-6 md:top-6 p-2 hover:bg-blue-100 rounded-full transition-colors"
               >
-                <X className="w-5 h-5 text-orange-400" />
+                <X className="w-5 h-5 text-blue-400" />
               </button>
 
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-orange-50 rounded-full flex items-center justify-center">
-                  <Bookmark className="w-5 h-5 text-orange-600" />
+                <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
+                  <Bookmark className="w-5 h-5 text-blue-900" />
                 </div>
                 <h3 className="text-2xl font-serif text-[#1a1a1a]">{selectedConcept.hebrew_term || selectedConcept.term}</h3>
               </div>
 
               <div className="space-y-4 mb-8 text-right">
-                <p className="text-orange-700 leading-relaxed text-lg whitespace-pre-wrap">
+                <p className="text-blue-900 leading-relaxed text-lg whitespace-pre-wrap">
                   {selectedConcept.preferredDefinition || selectedConcept.definition || selectedConcept.definition_he || selectedConcept.definition_en || 'אין הגדרה זמינה למושג זה כרגע.'}
                 </p>
                 {selectedConcept.category && (
-                  <div className="inline-block px-3 py-1 bg-orange-100 text-orange-500 text-xs rounded-full uppercase tracking-wider font-mono">
+                  <div className="inline-block px-3 py-1 bg-blue-100 text-blue-900 text-xs rounded-full uppercase tracking-wider font-mono">
                     {selectedConcept.category}
                   </div>
                 )}
@@ -916,8 +1018,8 @@ export default function App() {
                 className={cn(
                   "w-full py-4 rounded-full font-medium transition-all flex items-center justify-center gap-2 shadow-md active:scale-95",
                   savedConcepts.some(c => c.id === selectedConcept.id)
-                    ? "bg-orange-100 text-orange-700 hover:bg-orange-200"
-                    : "bg-orange-600 text-white hover:bg-orange-700"
+                    ? "bg-blue-100 text-blue-900 hover:bg-blue-200"
+                    : "bg-blue-900 text-white hover:bg-blue-950"
                 )}
               >
                 {savedConcepts.some(c => c.id === selectedConcept.id) ? (
@@ -951,27 +1053,27 @@ export default function App() {
                 <Logo />
               </div>
               
-              <h2 className="text-3xl font-serif text-[#1e3a8a] mb-4">ברוכים הבאים ל-<span className="text-orange-600 font-bold">Syncca</span></h2>
-              <p className="text-orange-500 font-mono text-xs uppercase tracking-[0.3em] mb-8">Conscious Love • Pilot Phase</p>
+              <h2 className="text-3xl font-serif text-[#1e3a8a] mb-4">ברוכים הבאים ל-<span className="text-blue-900 font-bold">Syncca</span></h2>
+              <p className="text-blue-700 font-mono text-xs uppercase tracking-[0.3em] mb-8">Conscious Love • Pilot Phase</p>
               
               <div className="space-y-6 text-right mb-10">
                 <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center text-orange-700 font-serif">1</div>
-                  <p className="text-orange-800 leading-relaxed">
+                  <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-900 font-serif">1</div>
+                  <p className="text-blue-900 leading-relaxed">
                     המערכת מבוססת על מודל בינה מלאכותית שאומן עם מתודולוגיה של תקשורת בין אישית וזוגית שפותח במשך עשרים שנים.
                   </p>
                 </div>
                 
                 <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center text-orange-700 font-serif">2</div>
-                  <p className="text-orange-800 leading-relaxed">
-                    כל שיחה מוגבלת ל-**30 דקות**. זהו זמן המיועד להתבוננות ממוקדת מבלי להגיע להצפה רגשית.
+                  <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-900 font-serif">2</div>
+                  <p className="text-blue-900 leading-relaxed">
+                    כל שיחה מוגבלת ל-**30 דקות**. זהו זמן המיועד להתבוננות ממוקדת ולעידוד חשיבה עצמאית.
                   </p>
                 </div>
                 
                 <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center text-orange-700 font-serif">3</div>
-                  <p className="text-orange-800 leading-relaxed">
+                  <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-900 font-serif">3</div>
+                  <p className="text-blue-900 leading-relaxed">
                     הפידבק שלך עוזר לנו לצמוח. בסיום השיחה, נשמח לשמוע מה היית מציע/ה להוסיף, להוריד או לשנות ב-Syncca.
                   </p>
                 </div>
@@ -982,12 +1084,12 @@ export default function App() {
                   localStorage.setItem('syncca_beta_welcome_seen', 'true');
                   setShowBetaWelcome(false);
                 }}
-                className="w-full bg-orange-700 hover:bg-orange-800 text-white py-5 rounded-full font-medium transition-all shadow-lg active:scale-95 text-lg"
+                className="w-full bg-blue-900 hover:bg-blue-950 text-white py-5 rounded-full font-medium transition-all shadow-lg active:scale-95 text-lg"
               >
                 הבנתי, בואו נתחיל
               </button>
               
-              <p className="mt-6 text-[10px] text-orange-400 uppercase tracking-widest font-mono">
+              <p className="mt-6 text-[10px] text-blue-400 uppercase tracking-widest font-mono">
                 Safe • Private • Conscious
               </p>
             </motion.div>
@@ -1001,26 +1103,26 @@ export default function App() {
           <motion.div 
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-[40px] p-8 md:p-12 max-w-lg w-full text-center shadow-2xl"
+            className="bg-white rounded-[40px] p-8 md:p-12 max-w-lg w-full text-center shadow-2xl border border-blue-100"
           >
-            <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Clock className="w-8 h-8 text-orange-700" />
+            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Clock className="w-8 h-8 text-blue-900" />
             </div>
             
             <h3 className="text-3xl font-serif mb-4 text-[#1a1a1a]">זמן השיחה הסתיים</h3>
-            <p className="text-orange-700 mb-8 leading-relaxed">
-              אני מרגישה שהשיחה כרגע מעוררת הצפה רגשית. מכיוון שהזמן שלנו הסתיים, אני מציעה שנתחיל לסכם ולנשום.
+            <p className="text-blue-700 mb-8 leading-relaxed">
+              הזמן המיועד להתבוננות ממוקדת הסתיים, וזהו רגע טוב לעצור ולעודד חשיבה עצמאית על הדברים שעלו.
             </p>
             
-            <div className="bg-orange-50 rounded-3xl p-6 mb-8 text-right border border-orange-100">
-              <label className="block text-sm font-serif mb-3 text-orange-900">
+            <div className="bg-blue-50 rounded-3xl p-6 mb-8 text-right border border-blue-100">
+              <label className="block text-sm font-serif mb-3 text-blue-900">
                 לפני שנפרדים, מה היית מציע/ה להוסיף, להוריד או לשנות ב-Syncca?
               </label>
               <textarea
                 value={feedbackInput}
                 onChange={(e) => setFeedbackInput(e.target.value)}
                 placeholder="הפידבק שלך עוזר לנו לצמוח..."
-                className="w-full bg-white border border-orange-200 rounded-2xl p-4 text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all min-h-[120px] resize-none"
+                className="w-full bg-white border border-blue-200 rounded-2xl p-4 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all min-h-[120px] resize-none"
               />
             </div>
 
@@ -1028,13 +1130,13 @@ export default function App() {
               <button 
                 onClick={submitFeedback}
                 disabled={isSubmittingFeedback || !feedbackInput.trim()}
-                className="w-full bg-[#5A5A40] text-white py-4 rounded-full font-medium shadow-lg hover:bg-[#4a4a35] transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
+                className="w-full bg-blue-900 text-white py-4 rounded-full font-medium shadow-lg hover:bg-blue-950 transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
               >
                 {isSubmittingFeedback ? 'שולח...' : 'שליחת פידבק וסיום'}
               </button>
               <button 
                 onClick={() => window.location.reload()}
-                className="w-full text-orange-400 py-2 text-sm hover:text-orange-600 transition-colors"
+                className="w-full text-blue-400 py-2 text-sm hover:text-blue-600 transition-colors"
               >
                 דלג/י והתחל שיחה חדשה
               </button>

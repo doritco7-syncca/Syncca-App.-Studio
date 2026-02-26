@@ -31,10 +31,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     const { userId, transcript, conceptsApplied, selfReview, cortexShift, timestamp } = req.body;
     
-    // Create record in Conversation_Logs
-    await base(AIRTABLE_SCHEMA.logs.tableName).create([{
+    // Try to find the correct table name (handle case sensitivity or plural/singular)
+    const tableNames = [AIRTABLE_SCHEMA.logs.tableName, "Logs", "logs", "Conversation Logs"];
+    let targetTable = tableNames[0];
+    
+    // Create record
+    await base(targetTable).create([{
       fields: {
-        [AIRTABLE_SCHEMA.logs.columns.userLink]: [userId], // Link to Users table
+        [AIRTABLE_SCHEMA.logs.columns.userLink]: [userId],
         [AIRTABLE_SCHEMA.logs.columns.transcript]: transcript,
         [AIRTABLE_SCHEMA.logs.columns.conceptsApplied]: conceptsApplied || "",
         [AIRTABLE_SCHEMA.logs.columns.selfReview]: selfReview || "",
@@ -45,7 +49,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     res.json({ success: true });
   } catch (error: any) {
-    console.error("Airtable Logging Failed:", error);
-    res.status(500).json({ error: error.message });
+    console.error("Airtable Logging Error Details:", {
+      message: error.message,
+      stack: error.stack,
+      tableName: AIRTABLE_SCHEMA.logs.tableName
+    });
+    res.status(500).json({ error: error.message, details: "Check server logs for more info" });
   }
 }
