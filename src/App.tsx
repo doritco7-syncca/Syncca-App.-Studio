@@ -185,7 +185,6 @@ export default function App() {
 
   const renderContentWithConcepts = (content: any): any => {
     if (lexicon.length === 0) {
-      // If lexicon isn't loaded yet, just return the content
       return content;
     }
 
@@ -194,27 +193,43 @@ export default function App() {
       return parts.map((part, i) => {
         if (part.startsWith('[[') && part.endsWith(']]')) {
           const termWithBrackets = part;
-          const term = part.slice(2, -2).trim();
-          const concept = lexicon.find(l => 
-            (l.term && l.term.trim() === term) || 
-            (l.hebrew_term && l.hebrew_term.trim() === term) || 
-            (l.term && l.term.toLowerCase().trim() === term.toLowerCase())
-          );
+          const rawTerm = part.slice(2, -2).trim();
+          
+          // Helper to normalize Hebrew terms (removing "ה" prefix for matching)
+          const normalize = (str: string) => {
+            if (!str) return '';
+            let s = str.trim().toLowerCase();
+            // Remove common Hebrew prefixes for better matching if needed
+            // but first try exact match
+            return s;
+          };
+
+          const term = normalize(rawTerm);
+          
+          const concept = lexicon.find(l => {
+            const hTerm = normalize(l.hebrew_term || '');
+            const eTerm = normalize(l.term || '');
+            
+            // Try exact match first
+            if (hTerm === term || eTerm === term) return true;
+            
+            // Try matching without "ה" prefix in Hebrew
+            if (term.startsWith('ה') && hTerm === term.substring(1)) return true;
+            if (hTerm.startsWith('ה') && hTerm.substring(1) === term) return true;
+            
+            return false;
+          });
           
           if (concept) {
             const isSaved = savedConcepts.some(c => c.id === concept.id);
-            const isEnglishTerm = concept.term && (concept.term.trim() === term || concept.term.toLowerCase().trim() === term.toLowerCase());
-            const displayDefinition = isEnglishTerm 
-              ? (concept.definition_en || concept.definition_he) 
-              : (concept.definition_he || concept.definition_en);
+            const displayTerm = rawTerm; // Keep the AI's original wording
+            const displayDefinition = concept.definition_he || concept.definition_en || concept.definition || 'אין הגדרה זמינה';
 
             return (
               <span 
                 key={i} 
                 onClick={(e) => {
                   e.stopPropagation();
-                  console.log("Concept clicked:", concept.hebrew_term || concept.term);
-                  // Attach the preferred definition for the modal
                   setSelectedConcept({ ...concept, preferredDefinition: displayDefinition });
                 }}
                 className={cn(
@@ -223,20 +238,18 @@ export default function App() {
                   isSaved ? "text-orange-800 decoration-orange-600" : "hover:text-orange-800 text-orange-700/90"
                 )}
               >
-                {term}
-                {/* Desktop Hover Tooltip */}
+                {displayTerm}
                 <span className="hidden md:block absolute bottom-full left-1/2 -translate-x-1/2 mb-4 w-64 p-3 bg-white text-[#1a1a1a] text-xs rounded-xl shadow-2xl opacity-0 invisible group-hover/concept:opacity-100 group-hover/concept:visible pointer-events-none z-50 border border-orange-200 leading-relaxed whitespace-normal">
                   <div className="flex justify-between items-start mb-1">
-                    <strong className="text-orange-800 font-bold">{isEnglishTerm ? concept.term : (concept.hebrew_term || concept.term)}</strong>
+                    <strong className="text-orange-800 font-bold">{concept.hebrew_term || concept.term}</strong>
                     {isSaved && <span className="text-[10px] text-orange-600 font-normal">Saved</span>}
                   </div>
-                  <span className="text-orange-700 block">{displayDefinition || 'No definition available'}</span>
+                  <span className="text-orange-700 block">{displayDefinition}</span>
                   <span className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-white"></span>
                 </span>
               </span>
             );
           }
-          // If not found in lexicon, return the original part with brackets
           return termWithBrackets;
         }
         return part;
