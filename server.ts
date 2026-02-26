@@ -159,15 +159,19 @@ const LEXICON_CACHE_TTL = 1000 * 60 * 5; // 5 minutes
 
 const getBase = () => {
   if (!airtableBase) {
-    const apiKey = process.env.AIRTABLE_API_KEY;
-    const baseId = process.env.AIRTABLE_BASE_ID;
+    const apiKey = process.env.AIRTABLE_API_KEY || process.env.VITE_AIRTABLE_API_KEY;
+    const baseId = process.env.AIRTABLE_BASE_ID || process.env.VITE_AIRTABLE_BASE_ID;
     
     if (!apiKey || !baseId) {
-      console.warn("Airtable credentials missing. API calls will fail.");
+      console.warn("Airtable credentials missing.");
       return null;
     }
     
-    airtableBase = new Airtable({ apiKey }).base(baseId);
+    // Use a very short timeout for Airtable requests to prevent Vercel hangs
+    airtableBase = new Airtable({ 
+      apiKey,
+      requestTimeout: 8000 // 8 seconds timeout
+    }).base(baseId);
   }
   return airtableBase;
 };
@@ -377,76 +381,82 @@ app.post("/api/logs", async (req, res) => {
 });
 app.post("/api/chat", async (req, res) => {
   console.log("Received chat request");
+  const timeoutPromise = new Promise((_, reject) => 
+    setTimeout(() => reject(new Error("Request timed out after 25 seconds")), 25000)
+  );
+
   try {
-    const { message, history, userName, savedConcepts } = req.body;
-    
-    // Try all possible environment variable names for the Gemini key
-    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || process.env.VITE_GEMINI_API_KEY;
+      const chatPromise = (async () => {
+        const { message, history, userName, savedConcepts } = req.body;
+        console.log(`Processing chat for user: ${userName || 'anonymous'}`);
+        
+        // Try all possible environment variable names for the Gemini key
+        const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || process.env.VITE_GEMINI_API_KEY;
 
-    if (!apiKey || apiKey === "undefined" || apiKey.length < 10) {
-      console.error("Gemini API key is missing or invalid format");
-      return res.status(500).json({ 
-        error: "AI configuration missing on server. Please ensure GEMINI_API_KEY is set correctly in Vercel settings." 
-      });
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
-    
-    // Fetch lexicon for context (with cache)
-    const base = getBase();
-    let lexicon = [];
-    if (base) {
-      const now = Date.now();
-      if (lexiconCache.length > 0 && (now - lastLexiconFetch < LEXICON_CACHE_TTL)) {
-        lexicon = lexiconCache;
-      } else {
-        try {
-          const records = await base(AIRTABLE_SCHEMA.lexicon.tableName).select().all();
-          lexicon = records.map(record => ({
-            hebrew_term: record.get(AIRTABLE_SCHEMA.lexicon.columns.hebrew_term),
-            term: record.get(AIRTABLE_SCHEMA.lexicon.columns.term),
-            definition_he: record.get(AIRTABLE_SCHEMA.lexicon.columns.definition_he)
-          }));
-          lexiconCache = lexicon;
-          lastLexiconFetch = now;
-        } catch (e) {
-          console.warn("Lexicon fetch failed for chat context, using cache if available");
-          lexicon = lexiconCache;
+        if (!apiKey || apiKey === "undefined" || apiKey.length < 10) {
+          console.error("Gemini API key is missing or invalid format");
+          throw new Error("AI configuration missing on server. Please ensure GEMINI_API_KEY is set correctly in Vercel settings.");
         }
-      }
-    }
 
-    const nameContext = userName ? `\nUSER_NAME: ${userName}\n` : "";
-    const lexiconContext = lexicon.length > 0
-      ? `\nKNOWLEDGE BASE:\n${lexicon.map(l => `- [[${l.hebrew_term}]]: ${l.definition_he}`).join('\n')}\n`
-      : "";
+        const ai = new GoogleGenAI({ apiKey });
+        
+        // Fetch lexicon for context (with cache)
+        const base = getBase();
+        let lexicon = [];
+        if (base) {
+          const now = Date.now();
+          if (lexiconCache.length > 0 && (now - lastLexiconFetch < LEXICON_CACHE_TTL)) {
+            lexicon = lexiconCache;
+          } else {
+            try {
+              console.log("Fetching lexicon from Airtable...");
+              const records = await base(AIRTABLE_SCHEMA.lexicon.tableName).select({
+                maxRecords: 100 // Limit to prevent massive payloads
+              }).all();
+              lexicon = records.map(record => ({
+                hebrew_term: record.get(AIRTABLE_SCHEMA.lexicon.columns.hebrew_term),
+                term: record.get(AIRTABLE_SCHEMA.lexicon.columns.term),
+                definition_he: record.get(AIRTABLE_SCHEMA.lexicon.columns.definition_he)
+              }));
+              lexiconCache = lexicon;
+              lastLexiconFetch = now;
+              console.log(`Fetched ${lexicon.length} terms.`);
+            } catch (e: any) {
+              console.warn(`Lexicon fetch failed: ${e.message}. Using cache if available.`);
+              lexicon = lexiconCache;
+            }
+          }
+        }
 
-    const chat = ai.chats.create({
-      model: "gemini-3-flash-preview",
-      config: {
-        systemInstruction: nameContext + lexiconContext + AIRTABLE_SCHEMA.systemInstruction,
-      },
-      history: history || []
-    });
+        const nameContext = userName ? `\nUSER_NAME: ${userName}\n` : "";
+        const lexiconContext = lexicon.length > 0
+          ? `\nKNOWLEDGE BASE:\n${lexicon.map(l => `- [[${l.hebrew_term}]]: ${l.definition_he}`).join('\n')}\n`
+          : "";
 
-    const response = await chat.sendMessage({ message });
-    if (!response || !response.text) {
-      throw new Error("No response text from Gemini");
-    }
-    res.json({ text: response.text });
+        console.log("Initializing Gemini chat...");
+        const chat = ai.chats.create({
+          model: "gemini-3-flash-preview",
+          config: {
+            systemInstruction: nameContext + lexiconContext + AIRTABLE_SCHEMA.systemInstruction,
+          },
+          history: history || []
+        });
+
+        console.log("Sending message to Gemini...");
+        const response = await chat.sendMessage({ message });
+        console.log("Received response from Gemini.");
+        if (!response || !response.text) {
+          throw new Error("No response text from Gemini");
+        }
+        return { text: response.text };
+      })();
+
+    const result = await Promise.race([chatPromise, timeoutPromise]) as any;
+    res.json(result);
   } catch (error: any) {
     console.error("Gemini Proxy Error:", error);
-    
-    // Detailed error logging for Vercel
-    const errorInfo = {
-      message: error.message,
-      stack: error.stack,
-      type: error.constructor.name
-    };
-    
     res.status(500).json({ 
-      error: error.message || "An unknown error occurred on the AI server",
-      details: process.env.NODE_ENV === "development" ? errorInfo : undefined
+      error: error.message || "An unknown error occurred on the AI server"
     });
   }
 });
@@ -465,43 +475,48 @@ async function startServer() {
   console.log("--- SERVER STARTUP ---");
   console.log("Mode:", process.env.NODE_ENV || "development");
   console.log("Vercel Env:", !!process.env.VERCEL);
-  console.log("Airtable Key Present:", !!process.env.AIRTABLE_API_KEY);
-  console.log("Airtable Base Present:", !!process.env.AIRTABLE_BASE_ID);
   
   if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
-    const { createServer: createViteServer } = await import("vite");
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
+    try {
+      // Use dynamic import to avoid bundling Vite in production
+      const viteModule = await import("vite");
+      const vite = await viteModule.createServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
 
-    // SPA Fallback for development
-    app.get("*", async (req, res, next) => {
-      if (req.url.startsWith('/api') || req.url === '/ping') return next();
-      try {
-        let template = fs.readFileSync(path.resolve(__dirname, "index.html"), "utf-8");
-        template = await vite.transformIndexHtml(req.url, template);
-        res.status(200).set({ "Content-Type": "text/html" }).end(template);
-      } catch (e) {
-        vite.ssrFixStacktrace(e as Error);
-        next(e);
-      }
-    });
+      // SPA Fallback for development
+      app.get("*", async (req, res, next) => {
+        if (req.url.startsWith('/api') || req.url === '/ping') return next();
+        try {
+          let template = fs.readFileSync(path.resolve(__dirname, "index.html"), "utf-8");
+          template = await vite.transformIndexHtml(req.url, template);
+          res.status(200).set({ "Content-Type": "text/html" }).end(template);
+        } catch (e) {
+          vite.ssrFixStacktrace(e as Error);
+          next(e);
+        }
+      });
+    } catch (e) {
+      console.error("Vite failed to load:", e);
+    }
   } else {
     console.log("Serving static files from dist");
     const distPath = path.resolve(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      if (req.url.startsWith('/api')) return res.status(404).json({ error: "API route not found" });
-      res.sendFile(path.resolve(distPath, "index.html"));
-    });
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        if (req.url.startsWith('/api')) return res.status(404).json({ error: "API route not found" });
+        res.sendFile(path.resolve(distPath, "index.html"));
+      });
+    }
   }
 
   // Only listen if not running as a Vercel function
-  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+  if (!process.env.VERCEL) {
     app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://0.0.0.0:${PORT}`);
+      console.log(`Server running on http://localhost:${PORT}`);
     });
   }
 }

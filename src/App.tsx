@@ -286,6 +286,20 @@ export default function App() {
     if (!emailInput.trim()) return;
 
     setIsLoading(true);
+    
+    // Add a client-side timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (isLoading) {
+        setIsLoading(false);
+        setMessages([{
+          id: 'timeout-error',
+          role: 'assistant',
+          content: 'החיבור לוקח יותר זמן מהרגיל. אנא בדקו את החיבור לאינטרנט או נסו שוב מאוחר יותר.',
+          timestamp: new Date()
+        }]);
+      }
+    }, 30000);
+
     try {
       // Create/Get User in Airtable
       const userRes = await fetch('/api/users', {
@@ -342,8 +356,10 @@ export default function App() {
           timestamp: new Date(),
         },
       ]);
+      clearTimeout(timeoutId);
     } catch (e) {
       console.error("Failed to complete sign up", e);
+      clearTimeout(timeoutId);
     } finally {
       setIsLoading(false);
     }
@@ -487,21 +503,37 @@ export default function App() {
                 />
               </div>
               
-              <button
-                type="submit"
-                disabled={isLoading || !emailInput.trim()}
-                className="w-full bg-orange-700 hover:bg-orange-800 text-white py-5 rounded-full font-medium transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-sm flex items-center justify-center gap-3 border border-orange-600 relative group disabled:opacity-50"
-              >
-                <div className="absolute -inset-1.5 border border-orange-100/50 rounded-full group-hover:border-orange-200/50 transition-colors"></div>
-                {isLoading ? (
-                  <RefreshCcw className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    <Sparkles className="w-5 h-5" />
-                    <span className="relative z-10">שמור והתחל שיחה</span>
-                  </>
-                )}
-              </button>
+              <div className="flex flex-col gap-3">
+                <button
+                  type="submit"
+                  disabled={isLoading || !emailInput.trim()}
+                  className="w-full bg-orange-700 hover:bg-orange-800 text-white py-5 rounded-full font-medium transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-sm flex items-center justify-center gap-3 border border-orange-600 relative group disabled:opacity-50"
+                >
+                  <div className="absolute -inset-1.5 border border-orange-100/50 rounded-full group-hover:border-orange-200/50 transition-colors"></div>
+                  {isLoading ? (
+                    <RefreshCcw className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      <Sparkles className="w-5 h-5" />
+                      <span className="relative z-10">שמור והתחל שיחה</span>
+                    </>
+                  )}
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmailInput('guest@syncca.com');
+                    setTimeout(() => {
+                      const form = document.querySelector('form');
+                      if (form) form.requestSubmit();
+                    }, 100);
+                  }}
+                  className="text-orange-400 text-xs hover:text-orange-600 transition-colors underline underline-offset-4"
+                >
+                  המשך כאורח (ללא שמירת נתונים)
+                </button>
+              </div>
             </form>
             
             <div className="mt-8 pt-6 border-t border-orange-100">
