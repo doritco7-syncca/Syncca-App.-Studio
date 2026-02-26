@@ -195,12 +195,11 @@ export default function App() {
           const termWithBrackets = part;
           const rawTerm = part.slice(2, -2).trim();
           
-          // Helper to normalize Hebrew terms (removing "ה" prefix for matching)
+          // Helper to normalize Hebrew terms (removing "ה" prefix and underscores for matching)
           const normalize = (str: string) => {
             if (!str) return '';
-            let s = str.trim().toLowerCase();
-            // Remove common Hebrew prefixes for better matching if needed
-            // but first try exact match
+            // Replace underscores with spaces and lowercase
+            let s = str.trim().toLowerCase().replace(/_/g, ' ');
             return s;
           };
 
