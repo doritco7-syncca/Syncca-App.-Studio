@@ -158,22 +158,25 @@ let lastLexiconFetch = 0;
 const LEXICON_CACHE_TTL = 1000 * 60 * 5; // 5 minutes
 
 const getBase = () => {
-  if (!airtableBase) {
-    const apiKey = process.env.AIRTABLE_API_KEY || process.env.VITE_AIRTABLE_API_KEY;
-    const baseId = process.env.AIRTABLE_BASE_ID || process.env.VITE_AIRTABLE_BASE_ID;
-    
-    if (!apiKey || !baseId) {
-      console.warn("Airtable credentials missing.");
-      return null;
-    }
-    
-    // Use a very short timeout for Airtable requests to prevent Vercel hangs
+  if (airtableBase) return airtableBase;
+  
+  const apiKey = process.env.AIRTABLE_API_KEY || process.env.VITE_AIRTABLE_API_KEY;
+  const baseId = process.env.AIRTABLE_BASE_ID || process.env.VITE_AIRTABLE_BASE_ID;
+  
+  if (!apiKey || !baseId) {
+    return null;
+  }
+  
+  try {
     airtableBase = new Airtable({ 
       apiKey,
-      requestTimeout: 8000 // 8 seconds timeout
+      requestTimeout: 5000 // Very aggressive 5s timeout
     }).base(baseId);
+    return airtableBase;
+  } catch (e) {
+    console.error("Airtable init failed:", e);
+    return null;
   }
-  return airtableBase;
 };
 
 // API Routes
@@ -472,11 +475,15 @@ app.use((err: any, req: any, res: any, next: any) => {
 
 // Vite middleware for development
 async function startServer() {
+  if (process.env.VERCEL) {
+    console.log("Running in Vercel environment - skipping server listen and Vite.");
+    return;
+  }
+
   console.log("--- SERVER STARTUP ---");
   console.log("Mode:", process.env.NODE_ENV || "development");
-  console.log("Vercel Env:", !!process.env.VERCEL);
   
-  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+  if (process.env.NODE_ENV !== "production") {
     try {
       // Use dynamic import to avoid bundling Vite in production
       const viteModule = await import("vite");
@@ -501,24 +508,11 @@ async function startServer() {
     } catch (e) {
       console.error("Vite failed to load:", e);
     }
-  } else {
-    console.log("Serving static files from dist");
-    const distPath = path.resolve(process.cwd(), "dist");
-    if (fs.existsSync(distPath)) {
-      app.use(express.static(distPath));
-      app.get("*", (req, res) => {
-        if (req.url.startsWith('/api')) return res.status(404).json({ error: "API route not found" });
-        res.sendFile(path.resolve(distPath, "index.html"));
-      });
-    }
   }
 
-  // Only listen if not running as a Vercel function
-  if (!process.env.VERCEL) {
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
-  }
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
 }
 
 startServer();
