@@ -71,12 +71,14 @@ export default function App() {
     const fetchLexicon = async () => {
       try {
         const res = await fetch('/api/lexicon');
-        if (res.ok) {
-          const data = await res.json();
-          setLexicon(data);
-          console.log("Lexicon loaded in App:", data.length, "terms");
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.message || errorData.error || `Server error: ${res.status}`);
         }
-      } catch (e) {
+        const data = await res.json();
+        setLexicon(data);
+        console.log("Lexicon loaded in App:", data.length, "terms");
+      } catch (e: any) {
         console.error("Failed to fetch lexicon", e);
       }
     };
@@ -98,12 +100,25 @@ export default function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: guestEmail, fullName: 'אורח זמני' })
           });
+          
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.message || errorData.error || `Server error: ${res.status}`);
+          }
+          
           const data = await res.json();
           userIdRef.current = data.id;
           setCurrentUser({ id: data.id, name: 'אורח', username: guestEmail, fields: data.fields });
           console.log("User initialized:", data.id);
-        } catch (e) {
+        } catch (e: any) {
           console.error("Failed to init user", e);
+          // Show error in chat so user knows why it's failing
+          setMessages([{
+            id: 'error-init',
+            role: 'assistant',
+            content: `שגיאת מערכת: ${e.message}. אנא וודאו שכל משתני הסביבה (Airtable) מוגדרים בוורסל.`,
+            timestamp: new Date()
+          }]);
         }
       }
     };

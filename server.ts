@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import Airtable from "airtable";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
@@ -154,6 +153,9 @@ app.use((req, res, next) => {
 
 // Airtable Configuration
 let airtableBase: any = null;
+let lexiconCache: any[] = [];
+let lastLexiconFetch = 0;
+const LEXICON_CACHE_TTL = 1000 * 60 * 5; // 5 minutes
 
 const getBase = () => {
   if (!airtableBase) {
@@ -171,12 +173,36 @@ const getBase = () => {
 };
 
 // API Routes
-app.get("/api/health", (req, res) => {
+app.get("/api/health", async (req, res) => {
+  const airtableKey = process.env.AIRTABLE_API_KEY;
+  const airtableBaseId = process.env.AIRTABLE_BASE_ID;
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+
+  let airtableStatus = "Not Configured";
+  if (airtableKey && airtableBaseId) {
+    try {
+      const base = new Airtable({ apiKey: airtableKey }).base(airtableBaseId);
+      // Try to fetch just one record to verify connectivity
+      await base(AIRTABLE_SCHEMA.lexicon.tableName).select({ maxRecords: 1 }).firstPage();
+      airtableStatus = "Connected Successfully";
+    } catch (e: any) {
+      airtableStatus = `Configuration Error: ${e.message}`;
+    }
+  }
+
   res.json({ 
     status: "ok", 
     mode: process.env.NODE_ENV || "development",
-    airtableConfigured: !!(process.env.AIRTABLE_API_KEY && process.env.AIRTABLE_BASE_ID),
-    geminiConfigured: !!(process.env.GEMINI_API_KEY || process.env.API_KEY)
+    isVercel: !!process.env.VERCEL,
+    airtable: {
+      status: airtableStatus,
+      keyPresent: !!airtableKey,
+      basePresent: !!airtableBaseId
+    },
+    gemini: {
+      configured: !!geminiKey,
+      keyPresent: !!geminiKey
+    }
   });
 });
 
@@ -216,7 +242,12 @@ app.get("/api/lexicon", async (req, res) => {
 app.post("/api/users", async (req, res) => {
   try {
     const base = getBase();
-    if (!base) throw new Error("Airtable not configured");
+    if (!base) {
+      return res.status(503).json({ 
+        error: "Airtable not configured on Vercel", 
+        message: "Please add AIRTABLE_API_KEY and AIRTABLE_BASE_ID to your Vercel Environment Variables." 
+      });
+    }
     
     const { username, fullName } = req.body;
     const tableName = AIRTABLE_SCHEMA.users.tableName;
@@ -361,19 +392,27 @@ app.post("/api/chat", async (req, res) => {
 
     const ai = new GoogleGenAI({ apiKey });
     
-    // Fetch lexicon for context
+    // Fetch lexicon for context (with cache)
     const base = getBase();
     let lexicon = [];
     if (base) {
-      try {
-        const records = await base(AIRTABLE_SCHEMA.lexicon.tableName).select().all();
-        lexicon = records.map(record => ({
-          hebrew_term: record.get(AIRTABLE_SCHEMA.lexicon.columns.hebrew_term),
-          term: record.get(AIRTABLE_SCHEMA.lexicon.columns.term),
-          definition_he: record.get(AIRTABLE_SCHEMA.lexicon.columns.definition_he)
-        }));
-      } catch (e) {
-        console.warn("Lexicon fetch failed for chat context");
+      const now = Date.now();
+      if (lexiconCache.length > 0 && (now - lastLexiconFetch < LEXICON_CACHE_TTL)) {
+        lexicon = lexiconCache;
+      } else {
+        try {
+          const records = await base(AIRTABLE_SCHEMA.lexicon.tableName).select().all();
+          lexicon = records.map(record => ({
+            hebrew_term: record.get(AIRTABLE_SCHEMA.lexicon.columns.hebrew_term),
+            term: record.get(AIRTABLE_SCHEMA.lexicon.columns.term),
+            definition_he: record.get(AIRTABLE_SCHEMA.lexicon.columns.definition_he)
+          }));
+          lexiconCache = lexicon;
+          lastLexiconFetch = now;
+        } catch (e) {
+          console.warn("Lexicon fetch failed for chat context, using cache if available");
+          lexicon = lexiconCache;
+        }
       }
     }
 
@@ -423,9 +462,14 @@ app.use((err: any, req: any, res: any, next: any) => {
 
 // Vite middleware for development
 async function startServer() {
-  console.log("Starting server in mode:", process.env.NODE_ENV || "development");
+  console.log("--- SERVER STARTUP ---");
+  console.log("Mode:", process.env.NODE_ENV || "development");
+  console.log("Vercel Env:", !!process.env.VERCEL);
+  console.log("Airtable Key Present:", !!process.env.AIRTABLE_API_KEY);
+  console.log("Airtable Base Present:", !!process.env.AIRTABLE_BASE_ID);
   
   if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
