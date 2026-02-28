@@ -69,6 +69,7 @@ export default function App() {
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackInput, setFeedbackInput] = useState('');
   const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
 
   const runAirtableTest = async () => {
     try {

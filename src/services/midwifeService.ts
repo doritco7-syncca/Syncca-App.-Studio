@@ -54,6 +54,7 @@ export class MidwifeService {
       }
 
       const data = await response.json();
+      console.log("Chat API raw response data:", data);
       
       // Handle tool calls if present
       if (data.toolCall && data.toolCall.name === "updateUserName") {
@@ -66,6 +67,7 @@ export class MidwifeService {
 
       // Update local history for context
       const responseText = data.text || "סליחה, לא הצלחתי להפיק תגובה טקסטואלית.";
+      console.log("Final response text used:", responseText);
       this.history.push({ role: 'user', parts: [{ text: message }] });
       this.history.push({ role: 'model', parts: [{ text: responseText }] });
 

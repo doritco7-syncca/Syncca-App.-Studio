@@ -376,6 +376,10 @@ app.post("/api/users/:userId/fields", async (req, res) => {
 });
 
 app.post("/api/logs", async (req, res) => {
+  const tableName = AIRTABLE_SCHEMA.logs.tableName;
+  const cols = AIRTABLE_SCHEMA.logs.columns;
+  const fields: any = {};
+
   try {
     const base = getBase();
     if (!base) {
@@ -385,15 +389,11 @@ app.post("/api/logs", async (req, res) => {
     
     const { userId, transcript, conceptsApplied, selfReview, cortexShift } = req.body;
     console.log("Received log request for userId:", userId);
-    const tableName = AIRTABLE_SCHEMA.logs.tableName;
     
     if (!userId) {
       return res.status(400).json({ error: "userId is required" });
     }
 
-    const cols = AIRTABLE_SCHEMA.logs.columns;
-    const fields: any = {};
-    
     // Only add fields if they have a non-empty value
     if (transcript) fields[cols.transcript] = transcript;
     
@@ -405,9 +405,19 @@ app.post("/api/logs", async (req, res) => {
     }
 
     // Be extremely careful with these fields - they might be problematic in some Airtable setups
-    if (conceptsApplied && conceptsApplied.trim()) fields[cols.conceptsApplied] = conceptsApplied;
-    if (selfReview && selfReview.trim()) fields[cols.selfReview] = selfReview;
-    if (cortexShift && cortexShift.trim()) fields[cols.cortexShift] = cortexShift;
+    if (conceptsApplied && typeof conceptsApplied === 'string' && conceptsApplied.trim()) {
+      fields[cols.conceptsApplied] = conceptsApplied;
+    }
+    
+    // For these fields, let's be even safer. If they are empty strings, don't send them.
+    // Also check if they are expected to be something else (like numbers or booleans)
+    if (selfReview && typeof selfReview === 'string' && selfReview.trim()) {
+      fields[cols.selfReview] = selfReview;
+    }
+    
+    if (cortexShift && typeof cortexShift === 'string' && cortexShift.trim()) {
+      fields[cols.cortexShift] = cortexShift;
+    }
     
     console.log("Creating Airtable log in table:", tableName);
     console.log("Fields being sent:", JSON.stringify(fields, null, 2));
@@ -555,12 +565,13 @@ app.post("/api/chat", async (req, res) => {
           model: modelName,
           config: {
             systemInstruction: nameContext + lexiconContext + AIRTABLE_SCHEMA.systemInstruction,
-            tools: [updateUserNameTool],
+            // Temporarily disabled tool as requested by user to debug response issues
+            // tools: [updateUserNameTool],
             safetySettings: [
-              { category: "HATE_SPEECH", threshold: "BLOCK_NONE" },
-              { category: "SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-              { category: "HARASSMENT", threshold: "BLOCK_NONE" },
-              { category: "DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+              { category: "HARM_CATEGORY_HATE_SPEECH" as any, threshold: "BLOCK_NONE" as any },
+              { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT" as any, threshold: "BLOCK_NONE" as any },
+              { category: "HARM_CATEGORY_HARASSMENT" as any, threshold: "BLOCK_NONE" as any },
+              { category: "HARM_CATEGORY_DANGEROUS_CONTENT" as any, threshold: "BLOCK_NONE" as any }
             ],
             temperature: 0.7,
             topP: 0.95,
@@ -579,14 +590,13 @@ app.post("/api/chat", async (req, res) => {
         }
         console.log("Gemini response received.");
         
-        // Handle function calls
+        // Handle function calls (if any were returned despite being disabled)
         const functionCalls = response.functionCalls;
         if (functionCalls && functionCalls.length > 0) {
           console.log("AI requested function call:", functionCalls[0].name);
           if (functionCalls[0].name === "updateUserName") {
             const { firstName } = functionCalls[0].args as any;
             console.log("Updating user name to:", firstName);
-            // We return the text AND the tool call info so the client can update its state
             return { 
               text: response.text || `נעים להכיר, ${firstName}! אני כאן איתך.`, 
               toolCall: { name: "updateUserName", args: { firstName } } 
@@ -594,8 +604,23 @@ app.post("/api/chat", async (req, res) => {
           }
         }
         
-        const responseText = response.text || "אני כאן איתך, מקשיבה. תרצי להמשיך?";
-        return { text: responseText };
+        // Get text response safely
+        let responseText = "";
+        try {
+          responseText = response.text || "";
+        } catch (e) {
+          console.warn("Error calling response.text getter:", e);
+        }
+
+        // Final fallback if text is still empty
+        if (!responseText || responseText.trim() === "") {
+          console.log("AI returned empty text, using fallback.");
+          responseText = "אני כאן איתך, מקשיבה. תרצי להמשיך?";
+        }
+
+        const finalResult = { text: responseText };
+        console.log("Sending final result to client:", JSON.stringify(finalResult).substring(0, 100) + "...");
+        return finalResult;
       })();
 
     const result = await Promise.race([chatPromise, timeoutPromise]) as any;
