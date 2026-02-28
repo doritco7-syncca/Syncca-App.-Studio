@@ -64,12 +64,18 @@ export default function App() {
 
   const runAirtableTest = async () => {
     try {
+      setLastSyncStatus('idle');
       const res = await fetch('/api/test-airtable');
+      if (!res.ok) {
+        const text = await res.text();
+        setDebugInfo({ error: `Server returned ${res.status}`, detail: text.substring(0, 100) });
+        return;
+      }
       const data = await res.json();
       setDebugInfo(data);
       console.log("Airtable Test Results:", data);
     } catch (e: any) {
-      setDebugInfo({ error: e.message });
+      setDebugInfo({ error: "Fetch failed", message: e.message });
     }
   };
   const [sessionId] = useState(() => Math.random().toString(36).substring(7));
@@ -490,9 +496,11 @@ export default function App() {
       const responseText = await midwifeRef.current.sendMessage(input);
       console.log("AI Response received:", responseText);
       
+      // Ensure loading is cleared even if response is malformed
+      setIsLoading(false);
+      
       if (!responseText || responseText.includes("סליחה, משהו השתבש")) {
-        setIsLoading(false);
-        // If it's an error message, we still show it but we don't want to overwrite a good one
+        // Handle error message if needed
       }
 
       const assistantMessage: Message = {

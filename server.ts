@@ -394,8 +394,7 @@ app.post("/api/logs", async (req, res) => {
     const cols = AIRTABLE_SCHEMA.logs.columns;
     
     const fields: any = {
-      [cols.transcript]: transcript || "",
-      [cols.createdAt]: new Date().toISOString()
+      [cols.transcript]: transcript || ""
     };
 
     // Only add user link if it's a valid Airtable record ID (starts with 'rec')
@@ -404,6 +403,8 @@ app.post("/api/logs", async (req, res) => {
     } else if (Array.isArray(userId) && userId[0]?.startsWith('rec')) {
       fields[cols.userLink] = userId;
     }
+
+    // Note: We no longer send Created_At manually to avoid conflicts with auto-generated fields
 
     if (conceptsApplied) fields[cols.conceptsApplied] = conceptsApplied;
     if (selfReview) fields[cols.selfReview] = selfReview;
@@ -453,10 +454,17 @@ app.get("/api/test-airtable", async (req, res) => {
     
     // Test Logs
     try {
+      console.log(`Testing Logs table: ${AIRTABLE_SCHEMA.logs.tableName}`);
       const logs = await base(AIRTABLE_SCHEMA.logs.tableName).select({ maxRecords: 1 }).firstPage();
-      results.logs = { status: "ok", count: logs.length };
+      results.logs = { status: "ok", count: logs.length, tableName: AIRTABLE_SCHEMA.logs.tableName };
     } catch (e: any) {
-      results.logs = { status: "error", message: e.message };
+      console.error("Logs table test failed:", e.message);
+      results.logs = { 
+        status: "error", 
+        message: e.message, 
+        tableName: AIRTABLE_SCHEMA.logs.tableName,
+        hint: "Check if the table name matches exactly in Airtable (case sensitive, no extra spaces)."
+      };
     }
     
     res.json(results);
