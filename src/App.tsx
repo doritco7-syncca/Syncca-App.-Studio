@@ -56,6 +56,7 @@ export default function App() {
   const [userMaritalStatus, setUserMaritalStatus] = useState('');
   const [userAgeRange, setUserAgeRange] = useState('');
   const [userGender, setUserGender] = useState('');
+  const [lastSyncStatus, setLastSyncStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [showBetaWelcome, setShowBetaWelcome] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackInput, setFeedbackInput] = useState('');
@@ -79,7 +80,10 @@ export default function App() {
         if (res.ok) {
           const data = await res.json();
           setLexicon(data);
-          console.log("Lexicon loaded silently:", data.length, "terms");
+          console.log("Lexicon loaded successfully:", data.length, "terms");
+          if (data.length === 0) {
+            console.warn("Lexicon is empty! Check Airtable configuration.");
+          }
         }
       } catch (e: any) {
         console.warn("Initial lexicon fetch failed (silent):", e.message);
@@ -167,28 +171,41 @@ export default function App() {
           const rawTerm = part.slice(2, -2).trim();
           
           // Helper to normalize terms for matching
-          const normalize = (str: string) => {
+          const normalize = (str: string, stripPrefixes = true) => {
             if (!str) return '';
-            return str.trim()
+            let normalized = str.trim()
               .toLowerCase()
               .replace(/_/g, ' ') // Underscores to spaces
-              .replace(/\s+/g, ' ') // Normalize multiple spaces
-              .split(' ')
-              .map(word => word.replace(/^[הבכלמ]/, '')) // Remove common Hebrew prefixes from each word
-              .join(' ');
+              .replace(/\s+/g, ' '); // Normalize multiple spaces
+            
+            if (stripPrefixes) {
+              // Improved Hebrew prefix stripping: only strip if it's a known prefix and the word is long enough
+              normalized = normalized.split(' ')
+                .map(word => {
+                  if (word.length <= 3) return word;
+                  // Only strip common Hebrew prefixes (ה, ב, כ, ל, מ, ו)
+                  return word.replace(/^[הבכלמו]/, '');
+                })
+                .join(' ');
+            }
+            return normalized;
           };
 
-          const term = normalize(rawTerm);
+          const termNoPrefix = normalize(rawTerm, true);
+          const termExact = normalize(rawTerm, false);
           
           const concept = lexicon.find(l => {
-            const hTerm = normalize(l.hebrew_term || '');
-            const eTerm = normalize(l.term || '');
+            const hTermNoPrefix = normalize(l.hebrew_term || '', true);
+            const hTermExact = normalize(l.hebrew_term || '', false);
+            const eTermNoPrefix = normalize(l.term || '', true);
+            const eTermExact = normalize(l.term || '', false);
             
-            // Try exact match on normalized strings
-            if (hTerm === term || eTerm === term) return true;
-            
-            // Try matching the raw term too just in case
-            if (normalize(l.hebrew_term || '') === normalize(rawTerm)) return true;
+            // Try exact matches first
+            if (hTermExact === termExact || eTermExact === termExact) return true;
+            // Try normalized matches
+            if (hTermNoPrefix === termNoPrefix || eTermNoPrefix === termNoPrefix) return true;
+            // Try matching raw term against normalized lexicon
+            if (hTermNoPrefix === termExact || eTermNoPrefix === termExact) return true;
             
             return false;
           });
@@ -357,17 +374,18 @@ export default function App() {
   };
 
   const logToAirtable = async (fullTranscript: string) => {
-    if (!userIdRef.current) {
+    const userId = userIdRef.current || currentUser?.id;
+    if (!userId) {
       console.warn("Cannot log to Airtable: No user ID available");
       return;
     }
     try {
-      console.log("Attempting to log to Airtable for user:", userIdRef.current);
+      console.log("Attempting to log to Airtable for user:", userId);
       const response = await fetch('/api/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: userIdRef.current,
+          userId: userId,
           transcript: fullTranscript,
           conceptsApplied: '', 
           selfReview: '',
@@ -379,8 +397,10 @@ export default function App() {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error("Airtable logging failed server-side:", errorData);
+        setLastSyncStatus('error');
       } else {
         console.log("Airtable logging successful");
+        setLastSyncStatus('success');
       }
     } catch (e: any) {
       console.error("Failed to call logging API:", e);
@@ -469,7 +489,7 @@ export default function App() {
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="max-w-md w-full bg-white rounded-[32px] p-8 shadow-xl border border-[#e5e1da] text-center"
+            className="max-w-md w-full bg-[#e5e1d8] rounded-[32px] p-8 shadow-xl border border-[#d1cdc3] text-center"
           >
             <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6">
               <Logo />
@@ -536,6 +556,13 @@ export default function App() {
             <p className="mt-6 text-[10px] text-orange-400 uppercase tracking-[0.2em] font-mono">
               Secure & Private Connection
             </p>
+            {lexicon.length === 0 && (
+              <div className="mt-4 p-2 bg-red-50 rounded-lg border border-red-100">
+                <p className="text-[9px] text-red-500 font-mono">
+                  Airtable Disconnected. Check Vercel Env Vars.
+                </p>
+              </div>
+            )}
           </motion.div>
         </div>
       );
@@ -546,13 +573,13 @@ export default function App() {
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full bg-white rounded-[40px] p-10 shadow-2xl text-center border border-[#e5e1da]/50"
+          className="max-w-md w-full bg-[#e5e1d8] rounded-[40px] p-10 shadow-2xl text-center border border-[#d1cdc3]"
         >
-          <div className="w-32 h-32 flex items-center justify-center mx-auto mb-2 relative">
+          <div className="w-32 h-24 flex items-center justify-center mx-auto mb-0 relative">
             <Logo />
           </div>
           
-          <h1 className="text-6xl font-serif font-bold text-[#ea580c] mb-6 tracking-tight">Syncca</h1>
+          <h1 className="text-6xl font-serif font-bold text-[#ea580c] mb-4 tracking-tight">Syncca</h1>
           
           <p className="text-[#ea580c] font-bold text-lg mb-6">
             המרחב שבו האהבה נושמת
@@ -952,17 +979,24 @@ export default function App() {
                 </section>
               </div>
 
-              <footer className="p-6 border-t border-blue-100 bg-blue-50/50 flex justify-between items-center">
-                <div className="text-[10px] text-blue-400 font-mono uppercase tracking-wider">
-                  Syncca Beta v1.0
+              <footer className="p-6 border-t border-blue-100 bg-blue-50/50 flex flex-col gap-4">
+                <div className="flex justify-between items-center">
+                  <div className="text-[10px] text-blue-400 font-mono uppercase tracking-wider">
+                    Syncca Beta v1.1 • {lexicon.length} Concepts Loaded • Sync: {lastSyncStatus}
+                  </div>
+                  <button 
+                    onClick={() => window.location.reload()}
+                    className="flex items-center gap-2 text-xs text-red-400 hover:text-red-500 transition-colors font-medium"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    יציאה מהחשבון
+                  </button>
                 </div>
-                <button 
-                  onClick={() => window.location.reload()}
-                  className="flex items-center gap-2 text-xs text-red-400 hover:text-red-500 transition-colors font-medium"
-                >
-                  <LogOut className="w-4 h-4" />
-                  יציאה מהחשבון
-                </button>
+                {lexicon.length === 0 && (
+                  <div className="bg-red-50 border border-red-100 rounded-xl p-3 text-[10px] text-red-600 font-mono text-center">
+                    שגיאה: המילון לא נטען. אנא וודאו ש-Airtable מוגדר כראוי ב-Vercel.
+                  </div>
+                )}
               </footer>
             </motion.div>
           </div>
