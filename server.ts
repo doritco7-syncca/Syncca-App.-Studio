@@ -392,11 +392,11 @@ app.post("/api/logs", async (req, res) => {
     }
 
     const cols = AIRTABLE_SCHEMA.logs.columns;
+    const fields: any = {};
     
-    const fields: any = {
-      [cols.transcript]: transcript || ""
-    };
-
+    // Only add fields if they have a non-empty value
+    if (transcript) fields[cols.transcript] = transcript;
+    
     // Only add user link if it's a valid Airtable record ID (starts with 'rec')
     if (userId && typeof userId === 'string' && userId.startsWith('rec')) {
       fields[cols.userLink] = [userId];
@@ -404,13 +404,13 @@ app.post("/api/logs", async (req, res) => {
       fields[cols.userLink] = userId;
     }
 
-    // Note: We no longer send Created_At manually to avoid conflicts with auto-generated fields
-
-    if (conceptsApplied) fields[cols.conceptsApplied] = conceptsApplied;
-    if (selfReview) fields[cols.selfReview] = selfReview;
-    if (cortexShift) fields[cols.cortexShift] = cortexShift;
+    // Be extremely careful with these fields - they might be problematic in some Airtable setups
+    if (conceptsApplied && conceptsApplied.trim()) fields[cols.conceptsApplied] = conceptsApplied;
+    if (selfReview && selfReview.trim()) fields[cols.selfReview] = selfReview;
+    if (cortexShift && cortexShift.trim()) fields[cols.cortexShift] = cortexShift;
     
-    console.log("Creating Airtable log with fields:", JSON.stringify(fields, null, 2));
+    console.log("Creating Airtable log in table:", tableName);
+    console.log("Fields being sent:", JSON.stringify(fields, null, 2));
     
     const createdRecord = await base(tableName).create([{ fields }]);
     console.log("Airtable log record created successfully:", createdRecord[0].id);
@@ -555,7 +555,16 @@ app.post("/api/chat", async (req, res) => {
           model: modelName,
           config: {
             systemInstruction: nameContext + lexiconContext + AIRTABLE_SCHEMA.systemInstruction,
-            tools: [updateUserNameTool]
+            tools: [updateUserNameTool],
+            safetySettings: [
+              { category: "HATE_SPEECH", threshold: "BLOCK_NONE" },
+              { category: "SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+              { category: "HARASSMENT", threshold: "BLOCK_NONE" },
+              { category: "DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+            ],
+            temperature: 0.7,
+            topP: 0.95,
+            topK: 40
           },
           history: history || []
         });
@@ -579,18 +588,14 @@ app.post("/api/chat", async (req, res) => {
             console.log("Updating user name to:", firstName);
             // We return the text AND the tool call info so the client can update its state
             return { 
-              text: response.text || `נעים להכיר, ${firstName}!`, 
+              text: response.text || `נעים להכיר, ${firstName}! אני כאן איתך.`, 
               toolCall: { name: "updateUserName", args: { firstName } } 
             };
           }
         }
         
-        if (!response || !response.text) {
-          console.error("Gemini returned empty response:", response);
-          throw new Error("No response text from Gemini");
-        }
-        
-        return { text: response.text };
+        const responseText = response.text || "אני כאן איתך, מקשיבה. תרצי להמשיך?";
+        return { text: responseText };
       })();
 
     const result = await Promise.race([chatPromise, timeoutPromise]) as any;
@@ -601,6 +606,7 @@ app.post("/api/chat", async (req, res) => {
     console.error("Error Detail:", error);
     res.status(500).json({ 
       error: error.message || "An unknown error occurred on the AI server",
+      details: error.name,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
