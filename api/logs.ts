@@ -31,21 +31,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     const { userId, transcript, conceptsApplied, selfReview, cortexShift, timestamp } = req.body;
     
+    // Validate userId
+    if (!userId) {
+      console.warn("Logging attempted without userId");
+      return res.status(400).json({ error: "userId is required" });
+    }
+
     // Try to find the correct table name (handle case sensitivity or plural/singular)
     const tableNames = [AIRTABLE_SCHEMA.logs.tableName, "Logs", "logs", "Conversation Logs"];
     let targetTable = tableNames[0];
     
     // Create record
-    await base(targetTable).create([{
-      fields: {
-        [AIRTABLE_SCHEMA.logs.columns.userLink]: [userId],
-        [AIRTABLE_SCHEMA.logs.columns.transcript]: transcript,
-        [AIRTABLE_SCHEMA.logs.columns.conceptsApplied]: conceptsApplied || "",
-        [AIRTABLE_SCHEMA.logs.columns.selfReview]: selfReview || "",
-        [AIRTABLE_SCHEMA.logs.columns.cortexShift]: cortexShift || "",
-        [AIRTABLE_SCHEMA.logs.columns.createdAt]: timestamp || new Date().toISOString()
-      }
-    }]);
+    const fields: any = {
+      [AIRTABLE_SCHEMA.logs.columns.transcript]: transcript,
+      [AIRTABLE_SCHEMA.logs.columns.conceptsApplied]: conceptsApplied || "",
+      [AIRTABLE_SCHEMA.logs.columns.selfReview]: selfReview || "",
+      [AIRTABLE_SCHEMA.logs.columns.cortexShift]: cortexShift || "",
+      [AIRTABLE_SCHEMA.logs.columns.createdAt]: timestamp || new Date().toISOString()
+    };
+
+    // Only add userLink if userId looks like an Airtable record ID (starts with 'rec')
+    if (userId.startsWith('rec')) {
+      fields[AIRTABLE_SCHEMA.logs.columns.userLink] = [userId];
+    } else {
+      console.log("userId is not a record ID, skipping link:", userId);
+    }
+
+    await base(targetTable).create([{ fields }]);
     
     res.json({ success: true });
   } catch (error: any) {

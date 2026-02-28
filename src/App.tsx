@@ -485,7 +485,7 @@ export default function App() {
   if (!isSessionActive) {
     if (showSignUp) {
       return (
-        <div className="min-h-screen bg-[#e5e1d8] flex items-center justify-center p-4 font-sans" dir="rtl">
+        <div className="min-h-screen flex items-center justify-center p-4 font-sans" dir="rtl">
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -569,7 +569,7 @@ export default function App() {
     }
 
     return (
-      <div className="min-h-screen bg-[#e5e1d8] flex items-center justify-center p-4 font-sans" dir="rtl">
+      <div className="min-h-screen flex items-center justify-center p-4 font-sans" dir="rtl">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -608,9 +608,11 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#e5e1d8] flex flex-col font-sans" dir="rtl">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-orange-100 sticky top-0 z-50 px-6 py-4 flex items-center justify-between shadow-sm">
+    <div className="min-h-screen flex flex-col font-sans items-center" dir="rtl">
+      {/* Main App Container - Boxed on desktop, full on mobile */}
+      <div className="flex-1 flex flex-col w-full max-w-5xl bg-[#e5e1d8] shadow-2xl md:my-8 md:rounded-[32px] overflow-hidden border-x border-[#d1cdc3] md:border-y relative">
+        {/* Header */}
+        <header className="bg-white/80 backdrop-blur-md border-b border-orange-100 sticky top-0 z-50 px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
           <Logo />
           <div>
@@ -752,7 +754,7 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
-
+      
       {/* Input Area */}
       <footer className="p-4 md:p-6 bg-white border-t border-[#e5e1da]">
         <div className="max-w-4xl mx-auto">
@@ -782,6 +784,7 @@ export default function App() {
           </div>
         </div>
       </footer>
+    </div>
 
       {/* Member Area Modal */}
       <AnimatePresence>
