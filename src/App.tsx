@@ -176,7 +176,8 @@ export default function App() {
             let normalized = str.trim()
               .toLowerCase()
               .replace(/_/g, ' ') // Underscores to spaces
-              .replace(/\s+/g, ' '); // Normalize multiple spaces
+              .replace(/\s+/g, ' ') // Normalize multiple spaces
+              .replace(/[וי]/g, ''); // Basic spelling normalization (remove optional 'vav' and 'yod')
             
             if (stripPrefixes) {
               // Improved Hebrew prefix stripping: only strip if it's a known prefix and the word is long enough
@@ -379,6 +380,13 @@ export default function App() {
       console.warn("Cannot log to Airtable: No user ID available");
       return;
     }
+
+    // Extract concepts from transcript
+    const conceptsFound = Array.from(fullTranscript.matchAll(/\[\[(.*?)\]\]/g))
+      .map(match => match[1])
+      .filter((v, i, a) => a.indexOf(v) === i) // unique
+      .join(', ');
+
     try {
       console.log("Attempting to log to Airtable for user:", userId);
       const response = await fetch('/api/logs', {
@@ -387,9 +395,9 @@ export default function App() {
         body: JSON.stringify({
           userId: userId,
           transcript: fullTranscript,
-          conceptsApplied: '', 
-          selfReview: '',
-          cortexShift: '',
+          conceptsApplied: conceptsFound, 
+          selfReview: 'Session in progress',
+          cortexShift: 'Monitoring...',
           timestamp: new Date().toISOString()
         })
       });

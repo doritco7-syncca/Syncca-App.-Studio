@@ -54,7 +54,7 @@ PERSONALITY:
 - זיהוי סיטואציה: כשהמשתמשת בכאב אמיתי – תהיי שם בשבילה ברכות. בכל מצב אחר – תהיי החברה השנונה שרואה הכל.
 - מטאפורות חיות: "הלימבית על מדים", "הקורטקס בחופשה", "הילד הפנימי עושה סצנה".
 - שימוש בסוגריים כפולים: חובה להשתמש ב-[[מושג]] בכל פעם שהוא מופיע. זה הדרך היחידה שהמשתמשת תראה הגדרות.
-- עברית טבעית: הימנעי מניסוחים רשמיים מדי כמו "אני מזהה כאן...". עדיף "וואלה, נראה לי ש...".
+- עברית טבעית: הימנעי מניסוחים רשמיים מדי. השתמשי ב"וואלה" רק פעם אחת בשיחה, לא בתחילת כל משפט. גווני עם מילות קישור אחרות כמו "תשמע/י", "קטע", "מעניין", "אני מבינה".
 
 INTERACTION LOGIC:
 - When you use a professional term from the lexicon, you can occasionally offer: "רוצה לשמור את המושג הזה בכרטיס האישי שלך?".
@@ -382,9 +382,9 @@ app.post("/api/logs", async (req, res) => {
     if (cortexShift) fields[cols.cortexShift] = cortexShift;
     
     await base(tableName).create([{ fields }]);
-+    console.log("Airtable log record created successfully");
+    console.log("Airtable log record created successfully");
      
-     res.json({ success: true });
+    res.json({ success: true });
   } catch (error: any) {
     console.error("Error logging conversation:", error);
     res.status(500).json({ 
@@ -444,7 +444,7 @@ app.post("/api/chat", async (req, res) => {
 
         const nameContext = userName ? `\nUSER_NAME: ${userName}\n` : "";
         const lexiconContext = lexicon.length > 0
-          ? `\nKNOWLEDGE BASE:\n${lexicon.map(l => `- [[${l.hebrew_term}]]: ${l.definition_he}`).join('\n')}\n`
+          ? `\nAVAILABLE CONCEPTS (Wrap these in [[ ]] when used):\n${lexicon.map(l => l.hebrew_term).join(', ')}\n`
           : "";
 
         console.log("Initializing Gemini chat...");
