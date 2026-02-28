@@ -55,6 +55,15 @@ export class MidwifeService {
 
       const data = await response.json();
       
+      // Handle tool calls if present
+      if (data.toolCall && data.toolCall.name === "updateUserName") {
+        const { firstName } = data.toolCall.args;
+        if (this.onNameUpdate) {
+          this.onNameUpdate(firstName);
+        }
+        this.userName = firstName;
+      }
+
       // Update local history for context
       this.history.push({ role: 'user', parts: [{ text: message }] });
       this.history.push({ role: 'model', parts: [{ text: data.text }] });

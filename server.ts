@@ -474,7 +474,7 @@ app.get("/api/test-airtable", async (req, res) => {
 });
 
 app.post("/api/chat", async (req, res) => {
-  console.log("Received chat request");
+  console.log("--- CHAT REQUEST START ---");
   const timeoutPromise = new Promise((_, reject) => 
     setTimeout(() => reject(new Error("Request timed out after 25 seconds")), 25000)
   );
@@ -482,7 +482,7 @@ app.post("/api/chat", async (req, res) => {
   try {
       const chatPromise = (async () => {
         const { message, history, userName, savedConcepts } = req.body;
-        console.log(`Processing chat for user: ${userName || 'anonymous'}`);
+        console.log(`User: ${userName || 'anonymous'}, Message: ${message?.substring(0, 50)}...`);
         
         // Try all possible environment variable names for the Gemini key
         const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || process.env.VITE_GEMINI_API_KEY;
@@ -492,6 +492,7 @@ app.post("/api/chat", async (req, res) => {
           throw new Error("AI configuration missing on server. Please ensure GEMINI_API_KEY is set correctly in Vercel settings.");
         }
 
+        console.log("Initializing GoogleGenAI...");
         const ai = new GoogleGenAI({ apiKey });
         
         // Fetch lexicon for context (with cache)
@@ -503,9 +504,9 @@ app.post("/api/chat", async (req, res) => {
             lexicon = lexiconCache;
           } else {
             try {
-              console.log("Fetching lexicon from Airtable...");
+              console.log("Fetching lexicon from Airtable for chat context...");
               const records = await base(AIRTABLE_SCHEMA.lexicon.tableName).select({
-                maxRecords: 100 // Limit to prevent massive payloads
+                maxRecords: 100 
               }).all();
               lexicon = records.map(record => ({
                 hebrew_term: record.get(AIRTABLE_SCHEMA.lexicon.columns.hebrew_term),
@@ -527,30 +528,74 @@ app.post("/api/chat", async (req, res) => {
           ? `\nAVAILABLE CONCEPTS (Wrap these in [[ ]] when used):\n${lexicon.map(l => l.hebrew_term).join(', ')}\n`
           : "";
 
-        console.log("Initializing Gemini chat...");
+        // Use gemini-2.5-flash for better stability and wider availability
+        const modelName = "gemini-2.5-flash";
+        console.log(`Starting chat with model: ${modelName}`);
+        
+        const updateUserNameTool = {
+          functionDeclarations: [
+            {
+              name: "updateUserName",
+              description: "Update the user's first name in the system when they introduce themselves.",
+              parameters: {
+                type: "OBJECT",
+                properties: {
+                  firstName: {
+                    type: "STRING",
+                    description: "The user's first name."
+                  }
+                },
+                required: ["firstName"]
+              }
+            }
+          ]
+        };
+
         const chat = ai.chats.create({
-          model: "gemini-3-flash-preview",
+          model: modelName,
           config: {
             systemInstruction: nameContext + lexiconContext + AIRTABLE_SCHEMA.systemInstruction,
+            tools: [updateUserNameTool]
           },
           history: history || []
         });
 
         console.log("Sending message to Gemini...");
-        const response = await chat.sendMessage({ message });
-        console.log("Received response from Gemini.");
+        let response = await chat.sendMessage({ message });
+        console.log("Gemini response received.");
+        
+        // Handle function calls
+        const functionCalls = response.functionCalls;
+        if (functionCalls && functionCalls.length > 0) {
+          console.log("AI requested function call:", functionCalls[0].name);
+          if (functionCalls[0].name === "updateUserName") {
+            const { firstName } = functionCalls[0].args as any;
+            console.log("Updating user name to:", firstName);
+            // We return the text AND the tool call info so the client can update its state
+            return { 
+              text: response.text || `נעים להכיר, ${firstName}!`, 
+              toolCall: { name: "updateUserName", args: { firstName } } 
+            };
+          }
+        }
+        
         if (!response || !response.text) {
+          console.error("Gemini returned empty response:", response);
           throw new Error("No response text from Gemini");
         }
+        
         return { text: response.text };
       })();
 
     const result = await Promise.race([chatPromise, timeoutPromise]) as any;
+    console.log("--- CHAT REQUEST SUCCESS ---");
     res.json(result);
   } catch (error: any) {
-    console.error("Gemini Proxy Error:", error);
+    console.error("--- CHAT REQUEST FAILED ---");
+    console.error("Error Detail:", error);
     res.status(500).json({ 
-      error: error.message || "An unknown error occurred on the AI server"
+      error: error.message || "An unknown error occurred on the AI server",
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });

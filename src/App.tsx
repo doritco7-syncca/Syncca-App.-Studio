@@ -41,7 +41,15 @@ export default function App() {
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(30 * 60); // 30 minutes in seconds
   const [isSessionActive, setIsSessionActive] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; username?: string; fields?: any } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; username?: string; fields?: any } | null>(() => {
+    const saved = localStorage.getItem('syncca_user_session');
+    try {
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      console.error("Failed to parse saved session", e);
+      return null;
+    }
+  });
   const [lexicon, setLexicon] = useState<any[]>([]);
   const [savedConcepts, setSavedConcepts] = useState<any[]>([]);
   const [selectedConcept, setSelectedConcept] = useState<any | null>(null);
@@ -81,7 +89,16 @@ export default function App() {
   const [sessionId] = useState(() => Math.random().toString(36).substring(7));
   const midwifeRef = useRef<MidwifeService | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const userIdRef = useRef<string | null>(null);
+  const userIdRef = useRef<string | null>(currentUser?.id || null);
+  
+  useEffect(() => {
+    if (currentUser) {
+      userIdRef.current = currentUser.id;
+      localStorage.setItem('syncca_user_session', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('syncca_user_session');
+    }
+  }, [currentUser]);
 
   const [airtableStatus, setAirtableStatus] = useState<string>('checking');
 
@@ -129,11 +146,25 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Remove the automatic initUser useEffect that was creating guest records on every load
   useEffect(() => {
-    // We only initialize the user now when they actually click "Start" or "Continue as Guest"
-    console.log("App loaded. Waiting for user identification...");
-  }, []);
+    const initFromSession = async () => {
+      if (currentUser && !midwifeRef.current && lexicon.length > 0) {
+        console.log("Initializing Syncca from saved session...");
+        const learnedIds = currentUser.fields?.[AIRTABLE_SCHEMA.users.columns.learnedConcepts] || [];
+        const userSavedConcepts = lexicon.filter(l => learnedIds.includes(l.id));
+        
+        const service = new MidwifeService();
+        service.onNameUpdate = (name: string) => {
+          updateUserField('firstName', name);
+          setCurrentUser(prev => prev ? { ...prev, name } : null);
+        };
+        await service.init(userSavedConcepts, currentUser.name !== 'משתמש' ? currentUser.name : undefined);
+        midwifeRef.current = service;
+        setIsSessionActive(true);
+      }
+    };
+    initFromSession();
+  }, [currentUser, lexicon]);
 
   useEffect(() => {
     if (currentUser && currentUser.fields && lexicon.length > 0) {
