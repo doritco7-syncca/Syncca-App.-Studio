@@ -100,7 +100,7 @@ CONCEPT EXPANSION: When expanding on a concept or providing a definition, always
 
 CONCEPT LINKING (MANDATORY):
 Whenever you use a term from the KNOWLEDGE BASE (Relationship_Lexicon), you MUST wrap it in double brackets.
-- INTRO: The VERY FIRST TIME you use a highlighted concept in a conversation, you MUST include a short, natural sentence explaining that you will start using these terms to help shift the language from [[מערכת לימבית]] to [[קורטקס]].
+- INTRO: The VERY FIRST TIME you use a highlighted concept in a conversation, you MUST include a short, natural sentence explaining that you will start using these terms to help shift the language from [[מערכת לימבית]] to [[קורטקס]]. ADDITIONALLY, at the end of that same response, add a friendly note about the "Personal Card" (המרחב האישי שלי - האייקון של גלגל השיניים למעלה) where they can see their saved concepts and insights.
 - LIMIT: Maximum 3 concepts per response. Choose the most impactful ones.
 `,
   lexicon: {
@@ -168,10 +168,12 @@ const getBase = () => {
   const baseId = process.env.AIRTABLE_BASE_ID || process.env.VITE_AIRTABLE_BASE_ID;
   
   if (!apiKey || !baseId) {
+    console.error("Airtable configuration missing. API Key:", !!apiKey, "Base ID:", !!baseId);
     return null;
   }
   
   try {
+    console.log(`Initializing Airtable with Base ID: ${baseId.substring(0, 5)}... and API Key: ${apiKey.substring(0, 5)}...`);
     airtableBase = new Airtable({ 
       apiKey,
       requestTimeout: 5000 // Very aggressive 5s timeout
@@ -208,11 +210,14 @@ app.get("/api/health", async (req, res) => {
     airtable: {
       status: airtableStatus,
       keyPresent: !!airtableKey,
-      basePresent: !!airtableBaseId
+      basePresent: !!airtableBaseId,
+      keyPrefix: airtableKey ? airtableKey.substring(0, 5) : null,
+      basePrefix: airtableBaseId ? airtableBaseId.substring(0, 5) : null
     },
     gemini: {
-      configured: !!geminiKey,
-      keyPresent: !!geminiKey
+      configured: !!geminiKey && geminiKey !== "undefined" && geminiKey.length > 10,
+      keyPresent: !!geminiKey,
+      prefix: (geminiKey && geminiKey.length > 5) ? geminiKey.substring(0, 6) : "None"
     }
   });
 });
@@ -261,6 +266,7 @@ app.post("/api/users", async (req, res) => {
     }
     
     const { username, fullName } = req.body;
+    console.log("Managing user for username:", username);
     const tableName = AIRTABLE_SCHEMA.users.tableName;
     const cols = AIRTABLE_SCHEMA.users.columns;
     
@@ -285,8 +291,14 @@ app.post("/api/users", async (req, res) => {
     ]);
     res.json({ id: record[0].id, fields: record[0].fields });
   } catch (error: any) {
-    console.error("Error managing user:", error);
-    res.status(500).json({ error: "Failed to manage user", details: error.message });
+    console.error("Error managing user in Airtable:", error);
+    res.status(500).json({ 
+      error: "Failed to manage user", 
+      message: error.message,
+      airtableError: error.error,
+      statusCode: error.statusCode,
+      tableName: AIRTABLE_SCHEMA.users.tableName
+    });
   }
 });
 
@@ -298,6 +310,7 @@ app.post("/api/users/:userId/concepts", async (req, res) => {
     
     const { userId } = req.params;
     const { conceptIds } = req.body;
+    console.log(`Updating concepts for user ${userId}:`, conceptIds);
     const tableName = AIRTABLE_SCHEMA.users.tableName;
     const cols = AIRTABLE_SCHEMA.users.columns;
 
@@ -312,8 +325,13 @@ app.post("/api/users/:userId/concepts", async (req, res) => {
 
     res.json({ success: true });
   } catch (error: any) {
-    console.error("Error updating user concepts:", error);
-    res.status(500).json({ error: "Failed to update concepts", details: error.message });
+    console.error("Error updating user concepts in Airtable:", error);
+    res.status(500).json({ 
+      error: "Failed to update concepts", 
+      message: error.message,
+      airtableError: error.error,
+      statusCode: error.statusCode
+    });
   }
 });
 
@@ -324,13 +342,17 @@ app.post("/api/users/:userId/fields", async (req, res) => {
     
     const { userId } = req.params;
     const { field, value } = req.body;
+    console.log(`Updating field ${field} for user ${userId} to:`, value);
     const tableName = AIRTABLE_SCHEMA.users.tableName;
     const cols = AIRTABLE_SCHEMA.users.columns;
 
     const airtableField = (cols as any)[field];
     if (!airtableField) {
+      console.error(`Field mapping failed for: ${field}`);
       return res.status(400).json({ error: `Field ${field} not found in schema` });
     }
+
+    console.log(`Updating Airtable user ${userId} field ${airtableField} to: ${value}`);
 
     await base(tableName).update([
       {
@@ -343,8 +365,13 @@ app.post("/api/users/:userId/fields", async (req, res) => {
 
     res.json({ success: true });
   } catch (error: any) {
-    console.error("Error updating user field:", error);
-    res.status(500).json({ error: "Failed to update field", details: error.message });
+    console.error("Error updating user field in Airtable:", error);
+    res.status(500).json({ 
+      error: "Failed to update field", 
+      message: error.message,
+      airtableError: error.error,
+      statusCode: error.statusCode
+    });
   }
 });
 
@@ -357,6 +384,7 @@ app.post("/api/logs", async (req, res) => {
     }
     
     const { userId, transcript, conceptsApplied, selfReview, cortexShift } = req.body;
+    console.log("Received log request for userId:", userId);
     const tableName = AIRTABLE_SCHEMA.logs.tableName;
     
     if (!userId) {
@@ -381,18 +409,62 @@ app.post("/api/logs", async (req, res) => {
     if (selfReview) fields[cols.selfReview] = selfReview;
     if (cortexShift) fields[cols.cortexShift] = cortexShift;
     
-    await base(tableName).create([{ fields }]);
-    console.log("Airtable log record created successfully");
+    console.log("Creating Airtable log with fields:", JSON.stringify(fields, null, 2));
+    
+    const createdRecord = await base(tableName).create([{ fields }]);
+    console.log("Airtable log record created successfully:", createdRecord[0].id);
      
-    res.json({ success: true });
+    res.json({ success: true, id: createdRecord[0].id });
   } catch (error: any) {
-    console.error("Error logging conversation:", error);
+    console.error("Error logging conversation to Airtable:", error);
+    // Return more detailed error info to help debug
     res.status(500).json({ 
       error: "Failed to log conversation", 
-      details: error.message
+      message: error.message,
+      airtableError: error.error, // Airtable SDK often puts details here
+      statusCode: error.statusCode,
+      tableName: tableName,
+      fieldsSent: fields
     });
   }
 });
+app.get("/api/test-airtable", async (req, res) => {
+  try {
+    const base = getBase();
+    if (!base) return res.status(500).json({ error: "Airtable not configured" });
+    
+    const results: any = {};
+    
+    // Test Lexicon
+    try {
+      const lexicon = await base(AIRTABLE_SCHEMA.lexicon.tableName).select({ maxRecords: 1 }).firstPage();
+      results.lexicon = { status: "ok", count: lexicon.length };
+    } catch (e: any) {
+      results.lexicon = { status: "error", message: e.message };
+    }
+    
+    // Test Users
+    try {
+      const users = await base(AIRTABLE_SCHEMA.users.tableName).select({ maxRecords: 1 }).firstPage();
+      results.users = { status: "ok", count: users.length };
+    } catch (e: any) {
+      results.users = { status: "error", message: e.message };
+    }
+    
+    // Test Logs
+    try {
+      const logs = await base(AIRTABLE_SCHEMA.logs.tableName).select({ maxRecords: 1 }).firstPage();
+      results.logs = { status: "ok", count: logs.length };
+    } catch (e: any) {
+      results.logs = { status: "error", message: e.message };
+    }
+    
+    res.json(results);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post("/api/chat", async (req, res) => {
   console.log("Received chat request");
   const timeoutPromise = new Promise((_, reject) => 

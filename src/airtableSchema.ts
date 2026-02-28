@@ -84,7 +84,7 @@ CONCEPT EXPANSION: When expanding on a concept or providing a definition, always
 
 CONCEPT LINKING (MANDATORY):
 Whenever you use a term from the KNOWLEDGE BASE (Relationship_Lexicon), you MUST wrap it in double brackets.
-- INTRO: The VERY FIRST TIME you use a highlighted concept in a conversation, you MUST include a short, natural sentence explaining that you will start using these terms to help shift the language from [[מערכת לימבית]] to [[קורטקס]].
+- INTRO: The VERY FIRST TIME you use a highlighted concept in a conversation, you MUST include a short, natural sentence explaining that you will start using these terms to help shift the language from [[מערכת לימבית]] to [[קורטקס]]. ADDITIONALLY, at the end of that same response, add a friendly note about the "Personal Card" (המרחב האישי שלי - האייקון של גלגל השיניים למעלה) where they can see their saved concepts and insights.
 - LIMIT: Maximum 3 concepts per response. Choose the most impactful ones.
 `,
   lexicon: {

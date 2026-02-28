@@ -60,11 +60,40 @@ export default function App() {
   const [showBetaWelcome, setShowBetaWelcome] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackInput, setFeedbackInput] = useState('');
-  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+
+  const runAirtableTest = async () => {
+    try {
+      const res = await fetch('/api/test-airtable');
+      const data = await res.json();
+      setDebugInfo(data);
+      console.log("Airtable Test Results:", data);
+    } catch (e: any) {
+      setDebugInfo({ error: e.message });
+    }
+  };
   const [sessionId] = useState(() => Math.random().toString(36).substring(7));
   const midwifeRef = useRef<MidwifeService | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const userIdRef = useRef<string | null>(null);
+
+  const [airtableStatus, setAirtableStatus] = useState<string>('checking');
+
+  useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        const res = await fetch('/api/health');
+        if (res.ok) {
+          const data = await res.json();
+          setAirtableStatus(data.airtable?.status || 'Unknown');
+          console.log("Health check result:", data);
+        }
+      } catch (e) {
+        setAirtableStatus('Error connecting to server');
+      }
+    };
+    checkHealth();
+  }, []);
 
   useEffect(() => {
     const hasSeenWelcome = localStorage.getItem('syncca_beta_welcome_seen');
@@ -325,6 +354,7 @@ export default function App() {
       }
 
       const firstName = userData.fields?.[AIRTABLE_SCHEMA.users.columns.firstName] || 'משתמש';
+      console.log("User identification successful. Airtable ID:", userData.id);
       setCurrentUser({ id: userData.id, name: firstName, username: emailInput, fields: userData.fields });
       userIdRef.current = userData.id;
       
@@ -406,6 +436,8 @@ export default function App() {
         const errorData = await response.json().catch(() => ({}));
         console.error("Airtable logging failed server-side:", errorData);
         setLastSyncStatus('error');
+        // Show a small snippet of the error in debugInfo if possible
+        setDebugInfo((prev: any) => ({ ...prev, lastLogError: errorData.message || errorData.details || 'Unknown error' }));
       } else {
         console.log("Airtable logging successful");
         setLastSyncStatus('success');
@@ -561,13 +593,23 @@ export default function App() {
               </button>
             </div>
             
+            {airtableStatus !== 'Connected Successfully' && airtableStatus !== 'checking' && (
+              <div className="mt-4 p-3 bg-red-50 rounded-2xl border border-red-100 flex items-center gap-3">
+                <ShieldAlert className="w-5 h-5 text-red-600 shrink-0" />
+                <div className="text-right">
+                  <p className="text-xs font-bold text-red-900">Airtable Disconnected</p>
+                  <p className="text-[10px] text-red-700">{airtableStatus}</p>
+                </div>
+              </div>
+            )}
+            
             <p className="mt-6 text-[10px] text-orange-400 uppercase tracking-[0.2em] font-mono">
               Secure & Private Connection
             </p>
-            {lexicon.length === 0 && (
-              <div className="mt-4 p-2 bg-red-50 rounded-lg border border-red-100">
-                <p className="text-[9px] text-red-500 font-mono">
-                  Airtable Disconnected. Check Vercel Env Vars.
+            {lexicon.length === 0 && airtableStatus === 'Connected Successfully' && (
+              <div className="mt-4 p-2 bg-amber-50 rounded-lg border border-amber-100">
+                <p className="text-[9px] text-amber-600 font-mono">
+                  Lexicon is empty. Check Relationship_Lexicon table.
                 </p>
               </div>
             )}
@@ -635,6 +677,35 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-4">
+          <div className="hidden lg:flex flex-col items-end gap-0.5">
+            <div className="flex items-center gap-3">
+              <span className={cn(
+                "text-[9px] font-mono uppercase tracking-tighter",
+                lexicon.length > 0 ? "text-emerald-600" : "text-amber-600"
+              )}>
+                LEX: {lexicon.length}
+              </span>
+              <span className={cn(
+                "text-[9px] font-mono uppercase tracking-tighter",
+                lastSyncStatus === 'success' ? "text-emerald-600" : 
+                lastSyncStatus === 'error' ? "text-red-600" : "text-blue-400"
+              )}>
+                SYNC: {lastSyncStatus}
+              </span>
+              <button 
+                onClick={runAirtableTest}
+                className="text-[9px] font-mono uppercase tracking-tighter text-blue-400 hover:text-blue-600 underline"
+              >
+                TEST
+              </button>
+            </div>
+            {debugInfo && (
+              <div className="text-[8px] font-mono text-blue-300 max-w-[150px] truncate text-left" dir="ltr">
+                UID: {userIdRef.current?.substring(0, 8)}... | {JSON.stringify(debugInfo)}
+              </div>
+            )}
+          </div>
+
           <button 
             onClick={() => setShowMemberArea(true)}
             className="p-2 hover:bg-orange-100 rounded-full transition-colors relative group"
@@ -707,7 +778,11 @@ export default function App() {
                 <span className="w-1.5 h-1.5 bg-blue-900 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
                 <span className="w-1.5 h-1.5 bg-blue-900 rounded-full animate-bounce"></span>
               </div>
-              <span className="text-[10px] text-blue-900 font-mono animate-pulse">רגע, מתארגנת על עצמי...</span>
+              <span className="text-[10px] text-blue-900 font-mono animate-pulse">
+                {messages.filter(m => m.role === 'assistant').length <= 1 
+                  ? "רגע, מתארגנת על עצמי..." 
+                  : "קלטתי ותיכף אענה לך"}
+              </span>
             </div>
           </motion.div>
         )}
