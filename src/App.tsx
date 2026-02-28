@@ -449,6 +449,13 @@ export default function App() {
       return;
     }
 
+    // Ensure userId is a string and valid
+    const finalUserId = typeof userId === 'string' ? userId : (userId as any).id || userId;
+    if (!finalUserId || typeof finalUserId !== 'string') {
+      console.error("Invalid userId for logging:", finalUserId);
+      return;
+    }
+
     // Extract concepts from transcript
     const conceptsFound = Array.from(fullTranscript.matchAll(/\[\[(.*?)\]\]/g))
       .map(match => match[1])
@@ -456,16 +463,15 @@ export default function App() {
       .join(', ');
 
     try {
-      console.log("Attempting to log to Airtable for user:", userId);
+      console.log("Attempting to log to Airtable for user:", finalUserId);
       const response = await fetch('/api/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: userId,
+          userId: finalUserId,
           transcript: fullTranscript,
           conceptsApplied: conceptsFound, 
-          selfReview: '',
-          cortexShift: '',
+          selfReview: 'Logged from client',
           timestamp: new Date().toISOString()
         })
       });
