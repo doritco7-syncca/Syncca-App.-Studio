@@ -463,8 +463,8 @@ export default function App() {
           userId: userId,
           transcript: fullTranscript,
           conceptsApplied: conceptsFound, 
-          selfReview: 'Session in progress',
-          cortexShift: 'Monitoring...',
+          selfReview: '',
+          cortexShift: '',
           timestamp: new Date().toISOString()
         })
       });

@@ -476,7 +476,7 @@ app.get("/api/test-airtable", async (req, res) => {
 app.post("/api/chat", async (req, res) => {
   console.log("--- CHAT REQUEST START ---");
   const timeoutPromise = new Promise((_, reject) => 
-    setTimeout(() => reject(new Error("Request timed out after 25 seconds")), 25000)
+    setTimeout(() => reject(new Error("Request timed out after 45 seconds")), 45000)
   );
 
   try {
@@ -528,8 +528,8 @@ app.post("/api/chat", async (req, res) => {
           ? `\nAVAILABLE CONCEPTS (Wrap these in [[ ]] when used):\n${lexicon.map(l => l.hebrew_term).join(', ')}\n`
           : "";
 
-        // Use gemini-2.5-flash for better stability and wider availability
-        const modelName = "gemini-2.5-flash";
+        // Use gemini-3-flash-preview for better stability and wider availability
+        const modelName = "gemini-3-flash-preview";
         console.log(`Starting chat with model: ${modelName}`);
         
         const updateUserNameTool = {
@@ -561,7 +561,13 @@ app.post("/api/chat", async (req, res) => {
         });
 
         console.log("Sending message to Gemini...");
-        let response = await chat.sendMessage({ message });
+        let response;
+        try {
+          response = await chat.sendMessage({ message });
+        } catch (geminiError: any) {
+          console.error("Gemini API error during sendMessage:", geminiError);
+          throw new Error(`Gemini API error: ${geminiError.message}`);
+        }
         console.log("Gemini response received.");
         
         // Handle function calls

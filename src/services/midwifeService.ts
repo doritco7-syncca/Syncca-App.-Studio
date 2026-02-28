@@ -65,10 +65,11 @@ export class MidwifeService {
       }
 
       // Update local history for context
+      const responseText = data.text || "סליחה, לא הצלחתי להפיק תגובה טקסטואלית.";
       this.history.push({ role: 'user', parts: [{ text: message }] });
-      this.history.push({ role: 'model', parts: [{ text: data.text }] });
+      this.history.push({ role: 'model', parts: [{ text: responseText }] });
 
-      return data.text;
+      return responseText;
     } catch (e: any) {
       console.error("AI interaction failed", e);
       return `סליחה, משהו השתבש בחיבור (${e.message}). בואי ננסה שוב.`;
