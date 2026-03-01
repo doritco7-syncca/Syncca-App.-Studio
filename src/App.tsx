@@ -545,8 +545,8 @@ const assistantMessage: Message = {
       console.log("🚀 Calling logToAirtable now with length:", transcript.length);
       
       // הקריאה לפונקציה שתיקנו קודם
-logToAirtable(transcript, user?.email);
-      } catch (error) {
+logToAirtable(transcript, user?.id);
+    } catch (error) {
       console.error('Error in handleSend:', error);
       } finally {
       setIsLoading(false);
