@@ -443,51 +443,31 @@ export default function App() {
   };
 
   const logToAirtable = async (fullTranscript: string) => {
-    const userId = userIdRef.current || currentUser?.id;
-    if (!userId) {
-      console.warn("Cannot log to Airtable: No user ID available");
-      return;
-    }
-
-    // Ensure userId is a string and valid
-    const finalUserId = typeof userId === 'string' ? userId : (userId as any).id || userId;
-    if (!finalUserId || typeof finalUserId !== 'string') {
-      console.error("Invalid userId for logging:", finalUserId);
-      return;
-    }
-
-    // Extract concepts from transcript
-    const conceptsFound = Array.from(fullTranscript.matchAll(/\[\[(.*?)\]\]/g))
-      .map(match => match[1])
-      .filter((v, i, a) => a.indexOf(v) === i) // unique
-      .join(', ');
+    // זיהוי המשתמש - סדר עדיפויות קריטי לחיבור ל-Airtable
+    const finalUserId = currentUser?.id || emailInput || userIdRef.current || "guest_user";
 
     try {
-      console.log("Attempting to log to Airtable for user:", finalUserId);
+      console.log("🚀 Attempting to log for:", finalUserId);
       const response = await fetch('/api/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: finalUserId,
+          userId: finalUserId, 
           transcript: fullTranscript,
-          conceptsApplied: conceptsFound, 
-          selfReview: 'Logged from client',
           timestamp: new Date().toISOString()
         })
       });
       
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Airtable logging failed server-side:", errorData);
-        setLastSyncStatus('error');
-        // Show a small snippet of the error in debugInfo if possible
-        setDebugInfo((prev: any) => ({ ...prev, lastLogError: errorData.message || errorData.details || 'Unknown error' }));
-      } else {
-        console.log("Airtable logging successful");
+      if (response.ok) {
         setLastSyncStatus('success');
+        console.log("✅ Log saved successfully");
+      } else {
+        setLastSyncStatus('error');
+        console.error("❌ Airtable rejected the log");
       }
-    } catch (e: any) {
-      console.error("Failed to call logging API:", e);
+    } catch (e) {
+      setLastSyncStatus('error');
+      console.error("❌ Connection error in logging", e);
     }
   };
 
