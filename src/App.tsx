@@ -443,34 +443,33 @@ export default function App() {
   };
 
   const logToAirtable = async (fullTranscript: string) => {
-    // זיהוי המשתמש - סדר עדיפויות קריטי לחיבור ל-Airtable
+    // זיהוי המשתמש
     const finalUserId = currentUser?.id || emailInput || userIdRef.current || "guest_user";
 
     try {
-      console.log("🚀 Attempting to log for:", finalUserId);
       const response = await fetch('/api/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: finalUserId, 
-          transcript: fullTranscript,
-          timestamp: new Date().toISOString()
+          // כאן התיקון הקריטי - השם המדויק של העמודה ב-Airtable
+          Full_Transcript: fullTranscript 
         })
       });
       
       if (response.ok) {
         setLastSyncStatus('success');
-        console.log("✅ Log saved successfully");
+        console.log("✅ Log saved successfully to Full_Transcript");
       } else {
+        const err = await response.json().catch(() => ({}));
+        console.error("❌ Server error:", err);
         setLastSyncStatus('error');
-        console.error("❌ Airtable rejected the log");
       }
     } catch (e) {
       setLastSyncStatus('error');
-      console.error("❌ Connection error in logging", e);
+      console.error("❌ Network error:", e);
     }
   };
-
   const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!input.trim() || isLoading || !midwifeRef.current) return;
