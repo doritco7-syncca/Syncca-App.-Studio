@@ -443,31 +443,35 @@ export default function App() {
   };
 
   const logToAirtable = async (fullTranscript: string) => {
-    // זיהוי המשתמש
     const finalUserId = currentUser?.id || emailInput || userIdRef.current || "guest_user";
 
     try {
+      console.log("📡 Sending log to API...");
       const response = await fetch('/api/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: finalUserId, 
-          // כאן התיקון הקריטי - השם המדויק של העמודה ב-Airtable
-          Full_Transcript: fullTranscript 
+          // אנחנו שולחים את המזהה ואת הטקסט תחת כמה שמות אפשריים 
+          // כדי שהשרת של וורסל "יתפוס" אחד מהם בוודאות
+          userId: finalUserId,
+          recordId: finalUserId,
+          Full_Transcript: fullTranscript,
+          transcript: fullTranscript,
+          content: fullTranscript
         })
       });
       
       if (response.ok) {
+        console.log("✅ Log Sent Successfully!");
         setLastSyncStatus('success');
-        console.log("✅ Log saved successfully to Full_Transcript");
       } else {
-        const err = await response.json().catch(() => ({}));
-        console.error("❌ Server error:", err);
+        const errorData = await response.json().catch(() => ({}));
+        console.error("❌ Server Error Detail:", errorData);
         setLastSyncStatus('error');
       }
     } catch (e) {
+      console.error("❌ Connection failed:", e);
       setLastSyncStatus('error');
-      console.error("❌ Network error:", e);
     }
   };
   const handleSend = async (e?: React.FormEvent) => {
