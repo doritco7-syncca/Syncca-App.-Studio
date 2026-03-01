@@ -395,7 +395,24 @@ export default function App() {
       console.log("User identification successful. Airtable ID:", userData.id);
       setCurrentUser({ id: userData.id, name: firstName, username: emailInput, fields: userData.fields });
       userIdRef.current = userData.id;
-      
+      // שליחת הלוג הראשון לאיירטייבל עם ה-ID המכוער
+      saveToLogs(userData.id, "המשתמש נכנס למערכת", 'system');
+      // פונקציית עזר לשמירת לוגים
+      const saveToLogs = async (userRecordId, messageContent, role) => {
+        try {
+          await fetch('/api/logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recordId: userRecordId,
+              content: messageContent,
+              role: role
+            })
+          });
+        } catch (error) {
+          console.error("Error saving to Airtable logs:", error);
+        }
+      }; // כאן נסגרת הפונקציה בצורה תקינה
       // Load user fields into state
       setUserInsights(userData.fields?.[AIRTABLE_SCHEMA.users.columns.insights] || '');
       setUserIntention(userData.fields?.[AIRTABLE_SCHEMA.users.columns.intention] || '');
