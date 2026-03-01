@@ -524,7 +524,8 @@ export default function App() {
         // Handle error message if needed
       }
 
-      const assistantMessage: Message = {
+    
+const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: responseText || 'סליחה, משהו השתבש. בוא ננסה שוב.',
@@ -534,15 +535,24 @@ export default function App() {
       const finalMessages = [...newMessages, assistantMessage];
       setMessages(finalMessages);
 
-      // Log the full transcript after each exchange
-      const transcript = finalMessages.map(m => `${m.role === 'user' ? 'User' : 'Syncca'}: ${m.content}`).join('\n\n');
+      // --- בדיקת דופק לקורטקס ---
+      console.log("📝 Preparing transcript for Airtable...");
+      
+      const transcript = finalMessages
+        .map(m => `${m.role === 'user' ? 'משתמש' : 'סינקה'}: ${m.content}`)
+        .join('\n\n');
+
+      console.log("🚀 Calling logToAirtable now with length:", transcript.length);
+      
+      // הקריאה לפונקציה שתיקנו קודם
       logToAirtable(transcript);
 
     } catch (error) {
-      console.error('Error sending message:', error);
+console.error('❌ Error in handleSend:', error);
     } finally {
       setIsLoading(false);
-    }
+      console.log("🏁 handleSend process finished.")
+ 
   };
 
   const formatTime = (seconds: number) => {
