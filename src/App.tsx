@@ -545,16 +545,14 @@ const assistantMessage: Message = {
       console.log("🚀 Calling logToAirtable now with length:", transcript.length);
       
       // הקריאה לפונקציה שתיקנו קודם
-      logToAirtable(transcript);
-
-    } catch (error) {
-console.error('❌ Error in handleSend:', error);
-    } finally {
+logToAirtable(transcript, user?.email);
+      } catch (error) {
+      console.error('Error in handleSend:', error);
+      } finally {
       setIsLoading(false);
-      console.log("🏁 handleSend process finished.")
- 
-  };
-
+      console.log("handleSend process finished.");
+      }
+    };
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
