@@ -1,8 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-
-export const config = {
-  runtime: 'edge',
-};
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const SYSTEM_INSTRUCTION = `
 CORE DIRECTIVE: CONCEPT LINKING
@@ -93,23 +90,16 @@ Whenever you use a term from the KNOWLEDGE BASE (Relationship_Lexicon), you MUST
 - LIMIT: Maximum 3 concepts per response. Choose the most impactful ones.
 `;
 
-export default async function handler(req: Request) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { 
-      status: 200, 
-      headers: { 
-        'Access-Control-Allow-Origin': '*', 
-        'Access-Control-Allow-Methods': 'POST',
-        'Access-Control-Allow-Headers': 'Content-Type'
-      } 
-    });
+    return res.status(200).send('OK');
   }
 
   try {
-    const { message, history, userName } = await req.json();
+    const { message, history, userName } = req.body;
     const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
     
-    if (!apiKey) return new Response(JSON.stringify({ error: "API Key missing" }), { status: 500 });
+    if (!apiKey) return res.status(500).json({ error: "API Key missing" });
     
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
@@ -120,14 +110,8 @@ export default async function handler(req: Request) {
       },
     });
 
-    return new Response(JSON.stringify({ text: response.text }), {
-      status: 200,
-      headers: { 
-        'Content-Type': 'application/json', 
-        'Access-Control-Allow-Origin': '*' 
-      }
-    });
+    res.status(200).json({ text: response.text });
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    res.status(500).json({ error: error.message });
   }
 }
