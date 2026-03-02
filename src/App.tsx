@@ -395,24 +395,7 @@ export default function App() {
       console.log("User identification successful. Airtable ID:", userData.id);
       setCurrentUser({ id: userData.id, name: firstName, username: emailInput, fields: userData.fields });
       userIdRef.current = userData.id;
-      // שליחת הלוג הראשון לאיירטייבל עם ה-ID המכוער
-      saveToLogs(userData.id, "המשתמש נכנס למערכת", 'system');
-      // פונקציית עזר לשמירת לוגים
-      const saveToLogs = async (userRecordId, messageContent, role) => {
-        try {
-          await fetch('/api/logs', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              recordId: userRecordId,
-              content: messageContent,
-              role: role
-            })
-          });
-        } catch (error) {
-          console.error("Error saving to Airtable logs:", error);
-        }
-      }; // כאן נסגרת הפונקציה בצורה תקינה
+      
       // Load user fields into state
       setUserInsights(userData.fields?.[AIRTABLE_SCHEMA.users.columns.insights] || '');
       setUserIntention(userData.fields?.[AIRTABLE_SCHEMA.users.columns.intention] || '');
@@ -460,37 +443,54 @@ export default function App() {
   };
 
   const logToAirtable = async (fullTranscript: string) => {
-    const finalUserId = currentUser?.id || emailInput || userIdRef.current || "guest_user";
+    const userId = userIdRef.current || currentUser?.id;
+    if (!userId) {
+      console.warn("Cannot log to Airtable: No user ID available");
+      return;
+    }
+
+    // Ensure userId is a string and valid
+    const finalUserId = typeof userId === 'string' ? userId : (userId as any).id || userId;
+    if (!finalUserId || typeof finalUserId !== 'string') {
+      console.error("Invalid userId for logging:", finalUserId);
+      return;
+    }
+
+    // Extract concepts from transcript
+    const conceptsFound = Array.from(fullTranscript.matchAll(/\[\[(.*?)\]\]/g))
+      .map(match => match[1])
+      .filter((v, i, a) => a.indexOf(v) === i) // unique
+      .join(', ');
 
     try {
-      console.log("📡 Sending log to API...");
+      console.log("Attempting to log to Airtable for user:", finalUserId);
       const response = await fetch('/api/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // אנחנו שולחים את המזהה ואת הטקסט תחת כמה שמות אפשריים 
-          // כדי שהשרת של וורסל "יתפוס" אחד מהם בוודאות
           userId: finalUserId,
-          recordId: finalUserId,
-          Full_Transcript: fullTranscript,
           transcript: fullTranscript,
-          content: fullTranscript
+          conceptsApplied: conceptsFound, 
+          selfReview: 'Logged from client',
+          timestamp: new Date().toISOString()
         })
       });
       
-      if (response.ok) {
-        console.log("✅ Log Sent Successfully!");
-        setLastSyncStatus('success');
-      } else {
+      if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error("❌ Server Error Detail:", errorData);
+        console.error("Airtable logging failed server-side:", errorData);
         setLastSyncStatus('error');
+        // Show a small snippet of the error in debugInfo if possible
+        setDebugInfo((prev: any) => ({ ...prev, lastLogError: errorData.message || errorData.details || 'Unknown error' }));
+      } else {
+        console.log("Airtable logging successful");
+        setLastSyncStatus('success');
       }
-    } catch (e) {
-      console.error("❌ Connection failed:", e);
-      setLastSyncStatus('error');
+    } catch (e: any) {
+      console.error("Failed to call logging API:", e);
     }
   };
+
   const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!input.trim() || isLoading || !midwifeRef.current) return;
@@ -541,8 +541,7 @@ export default function App() {
         // Handle error message if needed
       }
 
-    
-const assistantMessage: Message = {
+      const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: responseText || 'סליחה, משהו השתבש. בוא ננסה שוב.',
@@ -552,24 +551,17 @@ const assistantMessage: Message = {
       const finalMessages = [...newMessages, assistantMessage];
       setMessages(finalMessages);
 
-      // --- בדיקת דופק לקורטקס ---
-      console.log("📝 Preparing transcript for Airtable...");
-      
-      const transcript = finalMessages
-        .map(m => `${m.role === 'user' ? 'משתמש' : 'סינקה'}: ${m.content}`)
-        .join('\n\n');
+      // Log the full transcript after each exchange
+      const transcript = finalMessages.map(m => `${m.role === 'user' ? 'User' : 'Syncca'}: ${m.content}`).join('\n\n');
+      logToAirtable(transcript);
 
-      console.log("🚀 Calling logToAirtable now with length:", transcript.length);
-      
-      // הקריאה לפונקציה שתיקנו קודם
-logToAirtable(transcript, user?.id);
     } catch (error) {
-      console.error('Error in handleSend:', error);
-      } finally {
+      console.error('Error sending message:', error);
+    } finally {
       setIsLoading(false);
-      console.log("handleSend process finished.");
-      }
-    };
+    }
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
