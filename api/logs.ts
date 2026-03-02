@@ -41,19 +41,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     // Create record
     const fields: any = {
-      [AIRTABLE_SCHEMA.logs.columns.transcript]: transcript,
-      [AIRTABLE_SCHEMA.logs.columns.conceptsApplied]: conceptsApplied || "",
-      [AIRTABLE_SCHEMA.logs.columns.createdAt]: timestamp || new Date().toISOString()
+      [AIRTABLE_SCHEMA.logs.columns.transcript]: transcript || "No transcript provided",
+      [AIRTABLE_SCHEMA.logs.columns.conceptsApplied]: conceptsApplied || ""
     };
 
     // Link to user - Airtable accepts both record IDs (rec...) and primary field values (emails)
-    if (userId) {
-      fields[AIRTABLE_SCHEMA.logs.columns.userLink] = [userId];
+    // We wrap this in a try-catch or check if it's a valid ID to avoid failing the whole log
+    if (userId && typeof userId === 'string') {
+      if (userId.startsWith('rec')) {
+        fields[AIRTABLE_SCHEMA.logs.columns.userLink] = [userId];
+      } else {
+        // If it's an email, Airtable might still accept it if it's the primary field
+        fields[AIRTABLE_SCHEMA.logs.columns.userLink] = [userId];
+      }
     }
 
-    await base(targetTable).create([{ fields }]);
-    
-    res.json({ success: true });
+    console.log("Attempting to create log record in Airtable...");
+    try {
+      await base(targetTable).create([{ fields }]);
+      console.log("Log record created successfully");
+      res.json({ success: true });
+    } catch (createError: any) {
+      console.error("Airtable Create Error:", createError);
+      
+      // If linking failed, try creating without the link
+      if (createError.message?.includes('User_Link') || createError.message?.includes('link')) {
+        console.log("Retrying log creation without user link...");
+        const { [AIRTABLE_SCHEMA.logs.columns.userLink]: _, ...fieldsWithoutLink } = fields;
+        await base(targetTable).create([{ fields: fieldsWithoutLink }]);
+        return res.json({ success: true, warning: "Logged without user link due to error" });
+      }
+      
+      throw createError;
+    }
   } catch (error: any) {
     console.error("Airtable Logging Error Details:", {
       message: error.message,

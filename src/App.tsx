@@ -454,6 +454,7 @@ export default function App() {
       .join(', ');
 
     try {
+      setLastSyncStatus('idle');
       console.log("Attempting to log to Airtable for user:", finalUserId);
       const response = await fetch('/api/logs', {
         method: 'POST',

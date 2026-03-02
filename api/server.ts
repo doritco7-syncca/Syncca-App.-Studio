@@ -400,12 +400,10 @@ app.post("/api/logs", async (req, res) => {
     if (transcript) fields[cols.transcript] = transcript;
     
     // Link to user - Airtable accepts both record IDs (rec...) and primary field values (emails)
-    if (userId) {
-      if (typeof userId === 'string') {
-        fields[cols.userLink] = [userId];
-      } else if (Array.isArray(userId)) {
-        fields[cols.userLink] = userId;
-      }
+    if (userId && typeof userId === 'string') {
+      fields[cols.userLink] = [userId];
+    } else if (Array.isArray(userId)) {
+      fields[cols.userLink] = userId;
     }
 
     // Be extremely careful with these fields - they might be problematic in some Airtable setups
@@ -416,10 +414,23 @@ app.post("/api/logs", async (req, res) => {
     console.log("Creating Airtable log in table:", tableName);
     console.log("Fields being sent:", JSON.stringify(fields, null, 2));
     
-    const createdRecord = await base(tableName).create([{ fields }]);
-    console.log("Airtable log record created successfully:", createdRecord[0].id);
-     
-    res.json({ success: true, id: createdRecord[0].id });
+    try {
+      const createdRecord = await base(tableName).create([{ fields }]);
+      console.log("Airtable log record created successfully:", createdRecord[0].id);
+      res.json({ success: true, id: createdRecord[0].id });
+    } catch (createError: any) {
+      console.error("Airtable Create Error in server.ts:", createError);
+      
+      // Retry without link if that was the issue
+      if (createError.message?.includes('User_Link') || createError.message?.includes('link')) {
+        console.log("Retrying log creation without user link in server.ts...");
+        const { [cols.userLink]: _, ...fieldsWithoutLink } = fields;
+        const retryRecord = await base(tableName).create([{ fields: fieldsWithoutLink }]);
+        return res.json({ success: true, id: retryRecord[0].id, warning: "Logged without user link" });
+      }
+      
+      throw createError;
+    }
   } catch (error: any) {
     console.error("Error logging conversation to Airtable:", error);
     // Return more detailed error info to help debug
