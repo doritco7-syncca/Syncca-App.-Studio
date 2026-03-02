@@ -7,9 +7,7 @@ const AIRTABLE_SCHEMA = {
     columns: {
       userLink: "User_Link",
       transcript: "Full_Transcript",
-      conceptsApplied: "Concepts_Applied",
-      selfReview: "Midwife_Self_Review",
-      cortexShift: "Limbic_to_Cortex_Shift",
+      conceptsApplied: "Concepts_Applied",         
       createdAt: "Created_At"
     }
   }
