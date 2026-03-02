@@ -543,8 +543,8 @@ app.post("/api/chat", async (req, res) => {
           ? `\nAVAILABLE CONCEPTS (Wrap these in [[ ]] when used):\n${lexicon.map(l => l.hebrew_term).join(', ')}\n`
           : "";
 
-        // Use gemini-3-flash-preview for better stability and wider availability
-        const modelName = "gemini-3-flash-preview";
+        // Use gemini-2.0-flash for better stability and wider availability
+        const modelName = "gemini-2.0-flash";
         console.log(`Starting chat with model: ${modelName}`);
         
         const updateUserNameTool = {

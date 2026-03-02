@@ -1,3 +1,4 @@
+import { GoogleGenAI } from "@google/genai";
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Airtable from "airtable";
 
@@ -7,11 +8,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const geminiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
 
   let airtableStatus = "Not Configured";
+  let feedbackTableStatus = "Not Checked";
   if (airtableKey && airtableBaseId) {
     try {
       const base = new Airtable({ apiKey: airtableKey }).base(airtableBaseId);
       await base("Relationship_Lexicon").select({ maxRecords: 1 }).firstPage();
       airtableStatus = "Connected Successfully";
+      
+      // Check feedback table
+      try {
+        await base("Feedbacks").select({ maxRecords: 1 }).firstPage();
+        feedbackTableStatus = "Feedbacks Table OK";
+      } catch (e1) {
+        try {
+          await base("Feedback").select({ maxRecords: 1 }).firstPage();
+          feedbackTableStatus = "Feedback Table OK";
+        } catch (e2) {
+          feedbackTableStatus = "Feedback Table Not Found";
+        }
+      }
     } catch (e: any) {
       airtableStatus = `Configuration Error: ${e.message}`;
     }
@@ -21,8 +36,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (geminiKey) {
     try {
       const ai = new GoogleGenAI({ apiKey: geminiKey });
+      // Use the model we actually intend to use
       await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-2.0-flash",
         contents: "hi",
         config: { maxOutputTokens: 1 }
       });
@@ -37,6 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     time: new Date().toISOString(),
     airtable: {
       status: airtableStatus,
+      feedbackTable: feedbackTableStatus,
       keyPresent: !!airtableKey,
       basePresent: !!airtableBaseId
     },

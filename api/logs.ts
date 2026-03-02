@@ -36,9 +36,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: "userId is required" });
     }
 
-    // Try to find the correct table name
-    const targetTable = AIRTABLE_SCHEMA.logs.tableName;
-    
     // Prepare fields
     const fields: any = {
       [AIRTABLE_SCHEMA.logs.columns.transcript]: transcript || "No transcript provided",
@@ -54,47 +51,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       fields[AIRTABLE_SCHEMA.logs.columns.userLink] = [userId];
     }
 
-    console.log(`Attempting to log for session: ${sessionId || 'none'}`);
-
-    // Check if record with this sessionId already exists
-    let existingRecordId = null;
-    if (sessionId) {
-      const existing = await base(targetTable).select({
-        filterByFormula: `{${AIRTABLE_SCHEMA.logs.columns.sessionId}} = '${sessionId}'`,
-        maxRecords: 1
-      }).firstPage();
-      
-      if (existing && existing.length > 0) {
-        existingRecordId = existing[0].id;
-      }
-    }
-
-    try {
-      if (existingRecordId) {
-        console.log(`Updating existing log record: ${existingRecordId}`);
-        await base(targetTable).update(existingRecordId, fields);
-      } else {
-        console.log("Creating new log record...");
-        await base(targetTable).create([{ fields }]);
-      }
-      res.json({ success: true, updated: !!existingRecordId });
-    } catch (createError: any) {
-      console.error("Airtable Operation Error:", createError);
-      
-      // If linking failed, try without the link
-      if (createError.message?.includes('User_Link') || createError.message?.includes('link')) {
-        console.log("Retrying without user link...");
-        const { [AIRTABLE_SCHEMA.logs.columns.userLink]: _, ...fieldsWithoutLink } = fields;
-        if (existingRecordId) {
-          await base(targetTable).update(existingRecordId, fieldsWithoutLink);
-        } else {
-          await base(targetTable).create([{ fields: fieldsWithoutLink }]);
+    // Try "Conversation_Logs" first, then "Logs" as fallback
+    const tableNames = [AIRTABLE_SCHEMA.logs.tableName, "Logs", "Conversation_Logs"];
+    const uniqueTableNames = [...new Set(tableNames)];
+    
+    let lastError = null;
+    for (const tableName of uniqueTableNames) {
+      try {
+        console.log(`Attempting to log to table: ${tableName}`);
+        
+        // Check if record with this sessionId already exists
+        let existingRecordId = null;
+        if (sessionId) {
+          const existing = await base(tableName).select({
+            filterByFormula: `{${AIRTABLE_SCHEMA.logs.columns.sessionId}} = '${sessionId}'`,
+            maxRecords: 1
+          }).firstPage();
+          
+          if (existing && existing.length > 0) {
+            existingRecordId = existing[0].id;
+          }
         }
-        return res.json({ success: true, warning: "Logged without user link due to error" });
+
+        if (existingRecordId) {
+          console.log(`Updating existing log record: ${existingRecordId} in ${tableName}`);
+          await base(tableName).update(existingRecordId, fields);
+        } else {
+          console.log(`Creating new log record in ${tableName}...`);
+          await base(tableName).create([{ fields }]);
+        }
+        
+        return res.json({ success: true, updated: !!existingRecordId, table: tableName });
+      } catch (e: any) {
+        console.warn(`Logging failed on table ${tableName}: ${e.message}`);
+        lastError = e;
       }
-      
-      throw createError;
     }
+    
+    throw lastError || new Error("Failed to log to any table");
   } catch (error: any) {
     console.error("Airtable Logging Error Details:", {
       message: error.message,

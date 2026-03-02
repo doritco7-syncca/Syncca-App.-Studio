@@ -112,7 +112,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // instead of fetching them from Airtable on every request to save time.
 
     const isStartMessage = message === "START_SESSION_NEW_OR_RETURNING";
-    const modelToUse = isStartMessage ? "gemini-1.5-flash" : "gemini-3-flash-preview";
+    const modelToUse = "gemini-2.0-flash";
+    
+    console.log(`Attempting to use model: ${modelToUse} for message: ${message.substring(0, 20)}...`);
     
     let response;
     try {
@@ -124,7 +126,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           temperature: 0.7,
           topP: 0.95,
           topK: 40,
-          thinkingConfig: modelToUse.includes("gemini-3") ? { thinkingLevel: "LOW" as any } : undefined,
           safetySettings: [
             { category: "HARM_CATEGORY_HATE_SPEECH" as any, threshold: "BLOCK_NONE" as any },
             { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT" as any, threshold: "BLOCK_NONE" as any },
@@ -134,10 +135,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         },
       });
     } catch (e: any) {
-      console.warn(`${modelToUse} failed, falling back to 1.5 Flash:`, e.message);
-      if (modelToUse !== "gemini-1.5-flash") {
+      console.warn(`${modelToUse} failed, falling back to gemini-flash-latest:`, e.message);
+      try {
         response = await ai.models.generateContent({
-          model: "gemini-1.5-flash",
+          model: "gemini-flash-latest",
           contents: [...(history || []), { role: 'user', parts: [{ text: message }] }],
           config: { 
             systemInstruction: (userName ? `USER_NAME: ${userName}\n` : "") + SYSTEM_INSTRUCTION,
@@ -152,8 +153,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ]
           },
         });
-      } else {
-        throw e;
+      } catch (fallbackError: any) {
+        console.error("Fallback model also failed:", fallbackError.message);
+        throw fallbackError;
       }
     }
 

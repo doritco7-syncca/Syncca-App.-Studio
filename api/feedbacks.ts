@@ -21,20 +21,37 @@ const getBase = () => {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
   
+  console.log("Feedback submission received:", req.body);
+  
   try {
     const base = getBase();
     if (!base) throw new Error("Airtable not configured");
     
     const { email, content } = req.body;
     
-    const record = await base(AIRTABLE_SCHEMA.feedbacks.tableName).create([{
-      fields: { 
-        [AIRTABLE_SCHEMA.feedbacks.columns.userEmail]: email, 
-        [AIRTABLE_SCHEMA.feedbacks.columns.content]: content
-      }
-    }]);
+    // Try "Feedbacks" first, then "Feedback" as fallback
+    const tableNames = [AIRTABLE_SCHEMA.feedbacks.tableName, "Feedback", "Feedbacks"];
+    const uniqueTableNames = [...new Set(tableNames)];
     
-    res.json({ id: record[0].id, success: true });
+    let lastError = null;
+    for (const tableName of uniqueTableNames) {
+      try {
+        console.log(`Attempting to save feedback to table: ${tableName}`);
+        const record = await base(tableName).create([{
+          fields: { 
+            [AIRTABLE_SCHEMA.feedbacks.columns.userEmail]: email || "unknown", 
+            [AIRTABLE_SCHEMA.feedbacks.columns.content]: content || ""
+          }
+        }]);
+        console.log(`Feedback saved successfully to ${tableName}. Record ID: ${record[0].id}`);
+        return res.json({ id: record[0].id, success: true, table: tableName });
+      } catch (e: any) {
+        console.warn(`Failed to save to table ${tableName}: ${e.message}`);
+        lastError = e;
+      }
+    }
+    
+    throw lastError || new Error("Failed to save to any feedback table");
   } catch (error: any) {
     console.error("Airtable Feedback Submission Failed:", error);
     res.status(500).json({ error: error.message });

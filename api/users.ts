@@ -29,27 +29,47 @@ const getBase = () => {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
   
+  const { username, fullName } = req.body;
+  console.log(`User management request for: ${username}`);
+  
   try {
     const base = getBase();
     if (!base) throw new Error("Airtable not configured");
     
-    const { username, fullName } = req.body;
-    const existing = await base(AIRTABLE_SCHEMA.users.tableName).select({
-      filterByFormula: `{${AIRTABLE_SCHEMA.users.columns.username}} = '${username}'`
-    }).firstPage();
+    // Try "Users" first, then "User" as fallback
+    const tableNames = [AIRTABLE_SCHEMA.users.tableName, "User", "Users"];
+    const uniqueTableNames = [...new Set(tableNames)];
     
-    if (existing.length > 0) {
-      return res.json({ id: existing[0].id, fields: existing[0].fields });
+    let lastError = null;
+    for (const tableName of uniqueTableNames) {
+      try {
+        console.log(`Checking table: ${tableName} for user: ${username}`);
+        const existing = await base(tableName).select({
+          filterByFormula: `{${AIRTABLE_SCHEMA.users.columns.username}} = '${username}'`
+        }).firstPage();
+        
+        if (existing.length > 0) {
+          console.log(`Found existing user in ${tableName}: ${existing[0].id}`);
+          return res.json({ id: existing[0].id, fields: existing[0].fields, table: tableName });
+        }
+        
+        console.log(`User not found in ${tableName}, creating...`);
+        const record = await base(tableName).create([{
+          fields: { 
+            [AIRTABLE_SCHEMA.users.columns.username]: username, 
+            [AIRTABLE_SCHEMA.users.columns.fullName]: fullName || "" 
+          }
+        }]);
+        
+        console.log(`Created new user in ${tableName}: ${record[0].id}`);
+        return res.json({ id: record[0].id, fields: record[0].fields, table: tableName });
+      } catch (e: any) {
+        console.warn(`User operation failed on table ${tableName}: ${e.message}`);
+        lastError = e;
+      }
     }
     
-    const record = await base(AIRTABLE_SCHEMA.users.tableName).create([{
-      fields: { 
-        [AIRTABLE_SCHEMA.users.columns.username]: username, 
-        [AIRTABLE_SCHEMA.users.columns.fullName]: fullName || "" 
-      }
-    }]);
-    
-    res.json({ id: record[0].id, fields: record[0].fields });
+    throw lastError || new Error("Failed to manage user in any table");
   } catch (error: any) {
     console.error("Airtable User Management Failed:", error);
     res.status(500).json({ error: error.message });

@@ -198,7 +198,8 @@ export default function App() {
       }
       
       // 2. Add to dedicated Feedbacks table
-      await fetch('/api/feedbacks', {
+      console.log("Submitting feedback to API...", { email: currentUser?.username, content: feedbackInput });
+      const fbRes = await fetch('/api/feedbacks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -206,6 +207,14 @@ export default function App() {
           content: feedbackInput 
         })
       });
+      
+      if (!fbRes.ok) {
+        const fbError = await fbRes.json().catch(() => ({}));
+        console.error("Feedback submission failed:", fbError);
+      } else {
+        const fbData = await fbRes.json();
+        console.log("Feedback submitted successfully:", fbData);
+      }
 
       setShowFeedbackModal(false);
       window.location.reload(); // Refresh to start new session after feedback
@@ -765,7 +774,8 @@ export default function App() {
                 ) : (
                   <span>
                     A: {debugInfo.airtable?.status?.includes("Successfully") ? "OK" : "ERR"} | 
-                    G: {debugInfo.gemini?.status?.includes("Successfully") ? "OK" : "ERR"}
+                    G: {debugInfo.gemini?.status?.includes("Successfully") ? "OK" : "ERR"} |
+                    F: {debugInfo.airtable?.feedbackTable?.includes("OK") ? "OK" : "ERR"}
                   </span>
                 )}
               </div>
