@@ -138,7 +138,6 @@ Whenever you use a term from the KNOWLEDGE BASE (Relationship_Lexicon), you MUST
       userLink: "User_Link",
       transcript: "Full_Transcript",
       conceptsApplied: "Concepts_Applied",
-      selfReview: "Midwife_Self_Review",
       createdAt: "Created_At"
     }
   }
