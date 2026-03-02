@@ -37,16 +37,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     for (const tableName of uniqueTableNames) {
       try {
         console.log(`Attempting to save feedback to table: ${tableName}`);
-        const record = await base(tableName).create([{
-          fields: { 
-            [AIRTABLE_SCHEMA.feedbacks.columns.userEmail]: email || "unknown", 
-            [AIRTABLE_SCHEMA.feedbacks.columns.content]: content || ""
-          }
-        }]);
+        
+        // Build fields dynamically to be robust against missing columns
+        const fields: any = {};
+        if (content) fields[AIRTABLE_SCHEMA.feedbacks.columns.content] = content;
+        if (email) fields[AIRTABLE_SCHEMA.feedbacks.columns.userEmail] = email;
+        
+        const record = await base(tableName).create([{ fields }]);
         console.log(`Feedback saved successfully to ${tableName}. Record ID: ${record[0].id}`);
         return res.json({ id: record[0].id, success: true, table: tableName });
       } catch (e: any) {
         console.warn(`Failed to save to table ${tableName}: ${e.message}`);
+        
+        // If it failed because of a specific column, try with ONLY content
+        if (e.message?.includes('column') || e.message?.includes('field')) {
+          try {
+            console.log(`Retrying table ${tableName} with content only...`);
+            const record = await base(tableName).create([{ fields: { [AIRTABLE_SCHEMA.feedbacks.columns.content]: content || "" } }]);
+            return res.json({ id: record[0].id, success: true, table: tableName, partial: true });
+          } catch (innerE) {
+            console.warn(`Retry also failed: ${innerE.message}`);
+          }
+        }
         lastError = e;
       }
     }

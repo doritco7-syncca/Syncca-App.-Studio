@@ -112,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // instead of fetching them from Airtable on every request to save time.
 
     const isStartMessage = message === "START_SESSION_NEW_OR_RETURNING";
-    const modelToUse = "gemini-2.0-flash";
+    const modelToUse = "gemini-flash-latest";
     
     console.log(`Attempting to use model: ${modelToUse} for message: ${message.substring(0, 20)}...`);
     

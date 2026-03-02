@@ -36,9 +36,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (geminiKey) {
     try {
       const ai = new GoogleGenAI({ apiKey: geminiKey });
-      // Use the model we actually intend to use
+      // Use the most stable model for health check
       await ai.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "gemini-flash-latest",
         contents: "hi",
         config: { maxOutputTokens: 1 }
       });

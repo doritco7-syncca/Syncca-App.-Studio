@@ -54,15 +54,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         
         console.log(`User not found in ${tableName}, creating...`);
-        const record = await base(tableName).create([{
-          fields: { 
-            [AIRTABLE_SCHEMA.users.columns.username]: username, 
-            [AIRTABLE_SCHEMA.users.columns.fullName]: fullName || "" 
-          }
-        }]);
         
-        console.log(`Created new user in ${tableName}: ${record[0].id}`);
-        return res.json({ id: record[0].id, fields: record[0].fields, table: tableName });
+        // Build fields dynamically to be robust against missing columns
+        const fields: any = {
+          [AIRTABLE_SCHEMA.users.columns.username]: username
+        };
+        if (fullName) fields[AIRTABLE_SCHEMA.users.columns.fullName] = fullName;
+        
+        try {
+          const record = await base(tableName).create([{ fields }]);
+          console.log(`Created new user in ${tableName}: ${record[0].id}`);
+          return res.json({ id: record[0].id, fields: record[0].fields, table: tableName });
+        } catch (createErr: any) {
+          console.warn(`Initial creation failed in ${tableName}: ${createErr.message}`);
+          if (createErr.message?.includes('column') || createErr.message?.includes('field')) {
+            console.log(`Retrying ${tableName} with username only...`);
+            const record = await base(tableName).create([{ 
+              fields: { [AIRTABLE_SCHEMA.users.columns.username]: username } 
+            }]);
+            return res.json({ id: record[0].id, fields: record[0].fields, table: tableName, partial: true });
+          }
+          throw createErr;
+        }
       } catch (e: any) {
         console.warn(`User operation failed on table ${tableName}: ${e.message}`);
         lastError = e;
