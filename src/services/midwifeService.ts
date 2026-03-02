@@ -29,6 +29,9 @@ export class MidwifeService {
   }
 
   async sendMessage(message: string) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -38,8 +41,11 @@ export class MidwifeService {
           history: this.history,
           userName: this.userName,
           savedConcepts: this.savedConcepts
-        })
+        }),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const contentType = response.headers.get("content-type");
@@ -73,6 +79,10 @@ export class MidwifeService {
 
       return responseText;
     } catch (e: any) {
+      clearTimeout(timeoutId);
+      if (e.name === 'AbortError') {
+        return "החיבור לוקח יותר זמן מהרגיל. בואי ננסה שוב בעוד רגע.";
+      }
       console.error("AI interaction failed", e);
       return `סליחה, משהו השתבש בחיבור (${e.message}). בואי ננסה שוב.`;
     }

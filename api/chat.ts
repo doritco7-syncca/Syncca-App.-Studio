@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import Airtable from "airtable";
 
 const SYSTEM_INSTRUCTION = `
 CORE DIRECTIVE: CONCEPT LINKING
@@ -91,27 +92,62 @@ Whenever you use a term from the KNOWLEDGE BASE (Relationship_Lexicon), you MUST
 `;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  console.log(`--- CHAT REQUEST START ---`);
   if (req.method === 'OPTIONS') {
     return res.status(200).send('OK');
   }
 
   try {
     const { message, history, userName } = req.body;
-    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+    console.log(`User: ${userName || 'anonymous'}, Message: ${message?.substring(0, 50)}...`);
     
-    if (!apiKey) return res.status(500).json({ error: "API Key missing" });
+    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+    if (!apiKey) {
+      console.error("API Key missing");
+      return res.status(500).json({ error: "API Key missing" });
+    }
     
     const ai = new GoogleGenAI({ apiKey });
+    
+    // Fetch lexicon for context (optional but helpful)
+    let lexiconContext = "";
+    try {
+      const airtableKey = process.env.AIRTABLE_API_KEY;
+      const airtableBaseId = process.env.AIRTABLE_BASE_ID;
+      if (airtableKey && airtableBaseId) {
+        const base = new Airtable({ apiKey: airtableKey }).base(airtableBaseId);
+        const records = await base("Relationship_Lexicon").select({ maxRecords: 100 }).all();
+        const terms = records.map(r => r.get("Hebrew_Term")).filter(Boolean);
+        if (terms.length > 0) {
+          lexiconContext = `\nAVAILABLE CONCEPTS (Wrap these in [[ ]] when used):\n${terms.join(', ')}\n`;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to fetch lexicon for chat context", e);
+    }
+
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [...(history || []), { role: 'user', parts: [{ text: message }] }],
       config: { 
-        systemInstruction: (userName ? `USER_NAME: ${userName}\n` : "") + SYSTEM_INSTRUCTION,
+        systemInstruction: (userName ? `USER_NAME: ${userName}\n` : "") + lexiconContext + SYSTEM_INSTRUCTION,
+        temperature: 0.7,
+        topP: 0.95,
+        topK: 40,
+        safetySettings: [
+          { category: "HARM_CATEGORY_HATE_SPEECH" as any, threshold: "BLOCK_NONE" as any },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT" as any, threshold: "BLOCK_NONE" as any },
+          { category: "HARM_CATEGORY_HARASSMENT" as any, threshold: "BLOCK_NONE" as any },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT" as any, threshold: "BLOCK_NONE" as any }
+        ]
       },
     });
 
-    res.status(200).json({ text: response.text });
+    console.log("Gemini response received.");
+    const responseText = response.text || "אני כאן איתך, מקשיבה. תרצי להמשיך?";
+    res.status(200).json({ text: responseText });
   } catch (error: any) {
+    console.error("Chat API Error:", error);
     res.status(500).json({ error: error.message });
   }
 }
