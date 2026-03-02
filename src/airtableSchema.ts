@@ -116,6 +116,7 @@ Whenever you use a term from the KNOWLEDGE BASE (Relationship_Lexicon), you MUST
     tableName: "Conversation_Logs",
     columns: {
       logId: "Log_ID",
+      sessionId: "Session_ID",
       userLink: "User_Link",
       transcript: "Full_Transcript",
       conceptsApplied: "Concepts_Applied",

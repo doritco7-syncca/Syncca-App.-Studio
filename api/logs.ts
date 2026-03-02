@@ -8,7 +8,8 @@ const AIRTABLE_SCHEMA = {
       userLink: "User_Link",
       transcript: "Full_Transcript",
       conceptsApplied: "Concepts_Applied",
-      createdAt: "Created_At"
+      createdAt: "Created_At",
+      sessionId: "Session_ID"
     }
   }
 };
@@ -27,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const base = getBase();
     if (!base) throw new Error("Airtable not configured");
     
-    const { userId, transcript, conceptsApplied, timestamp } = req.body;
+    const { userId, transcript, conceptsApplied, timestamp, sessionId } = req.body;
     
     // Validate userId
     if (!userId) {
@@ -35,40 +36,60 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: "userId is required" });
     }
 
-    // Try to find the correct table name (handle case sensitivity or plural/singular)
-    const tableNames = [AIRTABLE_SCHEMA.logs.tableName, "Logs", "logs", "Conversation Logs"];
-    let targetTable = tableNames[0];
+    // Try to find the correct table name
+    const targetTable = AIRTABLE_SCHEMA.logs.tableName;
     
-    // Create record
+    // Prepare fields
     const fields: any = {
       [AIRTABLE_SCHEMA.logs.columns.transcript]: transcript || "No transcript provided",
       [AIRTABLE_SCHEMA.logs.columns.conceptsApplied]: conceptsApplied || ""
     };
 
-    // Link to user - Airtable accepts both record IDs (rec...) and primary field values (emails)
-    // We wrap this in a try-catch or check if it's a valid ID to avoid failing the whole log
+    if (sessionId) {
+      fields[AIRTABLE_SCHEMA.logs.columns.sessionId] = sessionId;
+    }
+
+    // Link to user
     if (userId && typeof userId === 'string') {
-      if (userId.startsWith('rec')) {
-        fields[AIRTABLE_SCHEMA.logs.columns.userLink] = [userId];
-      } else {
-        // If it's an email, Airtable might still accept it if it's the primary field
-        fields[AIRTABLE_SCHEMA.logs.columns.userLink] = [userId];
+      fields[AIRTABLE_SCHEMA.logs.columns.userLink] = [userId];
+    }
+
+    console.log(`Attempting to log for session: ${sessionId || 'none'}`);
+
+    // Check if record with this sessionId already exists
+    let existingRecordId = null;
+    if (sessionId) {
+      const existing = await base(targetTable).select({
+        filterByFormula: `{${AIRTABLE_SCHEMA.logs.columns.sessionId}} = '${sessionId}'`,
+        maxRecords: 1
+      }).firstPage();
+      
+      if (existing && existing.length > 0) {
+        existingRecordId = existing[0].id;
       }
     }
 
-    console.log("Attempting to create log record in Airtable...");
     try {
-      await base(targetTable).create([{ fields }]);
-      console.log("Log record created successfully");
-      res.json({ success: true });
+      if (existingRecordId) {
+        console.log(`Updating existing log record: ${existingRecordId}`);
+        await base(targetTable).update(existingRecordId, fields);
+      } else {
+        console.log("Creating new log record...");
+        await base(targetTable).create([{ fields }]);
+      }
+      res.json({ success: true, updated: !!existingRecordId });
     } catch (createError: any) {
-      console.error("Airtable Create Error:", createError);
+      console.error("Airtable Operation Error:", createError);
       
-      // If linking failed, try creating without the link
+      // If linking failed, try without the link
       if (createError.message?.includes('User_Link') || createError.message?.includes('link')) {
-        console.log("Retrying log creation without user link...");
+        console.log("Retrying without user link...");
         const { [AIRTABLE_SCHEMA.logs.columns.userLink]: _, ...fieldsWithoutLink } = fields;
-        await base(targetTable).create([{ fields: fieldsWithoutLink }]);
+        if (existingRecordId) {
+          await base(targetTable).update(existingRecordId, fieldsWithoutLink);
+        } else {
+          await base(targetTable).create([{ fields: fieldsWithoutLink }]);
+        }
         return res.json({ success: true, warning: "Logged without user link due to error" });
       }
       

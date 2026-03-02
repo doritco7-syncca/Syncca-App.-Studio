@@ -477,7 +477,8 @@ export default function App() {
           userId: finalUserId,
           transcript: fullTranscript,
           conceptsApplied: conceptsFound, 
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          sessionId: sessionId
         })
       });
       
