@@ -27,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const base = getBase();
     if (!base) throw new Error("Airtable not configured");
     
-    const { userId, transcript, conceptsApplied, selfReview, cortexShift, timestamp } = req.body;
+    const { userId, transcript, conceptsApplied, timestamp } = req.body;
     
     // Validate userId
     if (!userId) {
@@ -43,9 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const fields: any = {
       [AIRTABLE_SCHEMA.logs.columns.transcript]: transcript,
       [AIRTABLE_SCHEMA.logs.columns.conceptsApplied]: conceptsApplied || "",
-      [AIRTABLE_SCHEMA.logs.columns.selfReview]: selfReview || "",
-      [AIRTABLE_SCHEMA.logs.columns.cortexShift]: cortexShift || "",
-      [AIRTABLE_SCHEMA.logs.columns.createdAt]: timestamp || new Date().toISOString()
+          [AIRTABLE_SCHEMA.logs.columns.createdAt]: timestamp || new Date().toISOString()
     };
 
     // Only add userLink if userId looks like an Airtable record ID (starts with 'rec')
