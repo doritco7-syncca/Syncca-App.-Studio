@@ -211,13 +211,14 @@ export default function App() {
       if (!fbRes.ok) {
         const fbError = await fbRes.json().catch(() => ({}));
         console.error("Feedback submission failed:", fbError);
+        alert("חלה שגיאה בשליחת הפידבק. אנא נסו שוב.");
       } else {
         const fbData = await fbRes.json();
         console.log("Feedback submitted successfully:", fbData);
+        // Give a small moment for the user to see success if we had a toast, 
+        // but for now just ensure the reload happens AFTER the await.
+        window.location.reload(); 
       }
-
-      setShowFeedbackModal(false);
-      window.location.reload(); // Refresh to start new session after feedback
     } catch (e) {
       console.error("Failed to submit feedback", e);
     } finally {

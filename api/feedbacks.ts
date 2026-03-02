@@ -50,36 +50,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         fields[AIRTABLE_SCHEMA.feedbacks.columns.content] = content;
         if (email) fields[AIRTABLE_SCHEMA.feedbacks.columns.userEmail] = email;
         
+        console.log(`Sending fields to Airtable:`, JSON.stringify(fields));
+        
         try {
           const record = await base(tableName).create([{ fields }]);
           console.log(`Feedback saved successfully to ${tableName}. Record ID: ${record[0].id}`);
           return res.json({ id: record[0].id, success: true, table: tableName });
         } catch (e: any) {
-          console.warn(`Initial save failed for ${tableName}: ${e.message}`);
+          console.warn(`Initial save failed for ${tableName}: ${e.message}`, e);
           
           // Fallback: Try with common alternative column names if the first one failed
-          if (e.message?.includes('column') || e.message?.includes('field')) {
-            console.log(`Retrying ${tableName} with alternative column names...`);
-            
-            // Try "Content" as a very common fallback
+          console.log(`Retrying ${tableName} with alternative column names...`);
+          
+          // Try "Content" as a very common fallback
+          try {
+            const altFields: any = { "Content": content };
+            if (email) altFields["Email"] = email;
+            console.log(`Retrying with 'Content' and 'Email' fields...`);
+            const record = await base(tableName).create([{ fields: altFields }]);
+            return res.json({ id: record[0].id, success: true, table: tableName, alt: "Content" });
+          } catch (innerE1: any) {
+            console.warn(`Retry 1 failed: ${innerE1.message}`);
+            // Try "Feedback" as another common fallback
             try {
-              const altFields: any = { "Content": content };
+              const altFields: any = { "Feedback": content };
+              if (email) altFields["User"] = email;
+              console.log(`Retrying with 'Feedback' and 'User' fields...`);
               const record = await base(tableName).create([{ fields: altFields }]);
-              return res.json({ id: record[0].id, success: true, table: tableName, alt: "Content" });
-            } catch (innerE1) {
-              // Try "Feedback" as another common fallback
+              return res.json({ id: record[0].id, success: true, table: tableName, alt: "Feedback" });
+            } catch (innerE2: any) {
+              console.warn(`Retry 2 failed: ${innerE2.message}`);
+              // Last resort: try with ONLY content using the schema name
               try {
-                const altFields: any = { "Feedback": content };
-                const record = await base(tableName).create([{ fields: altFields }]);
-                return res.json({ id: record[0].id, success: true, table: tableName, alt: "Feedback" });
-              } catch (innerE2) {
-                // Last resort: try with ONLY content using the schema name
+                console.log(`Last resort: retrying with only content field...`);
                 const record = await base(tableName).create([{ fields: { [AIRTABLE_SCHEMA.feedbacks.columns.content]: content || "" } }]);
                 return res.json({ id: record[0].id, success: true, table: tableName, partial: true });
+              } catch (innerE3: any) {
+                console.warn(`Last resort failed: ${innerE3.message}`);
+                throw innerE3;
               }
             }
           }
-          throw e;
         }
       } catch (e: any) {
         console.warn(`Failed to save to table ${tableName}: ${e.message}`);

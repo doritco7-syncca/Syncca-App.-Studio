@@ -112,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // instead of fetching them from Airtable on every request to save time.
 
     const isStartMessage = message === "START_SESSION_NEW_OR_RETURNING";
-    const modelToUse = "gemini-flash-latest";
+    const modelToUse = "gemini-3-flash-preview";
     
     console.log(`[Chat] Using model: ${modelToUse}. Start message: ${isStartMessage}`);
     const startTime = Date.now();
