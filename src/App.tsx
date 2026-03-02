@@ -55,7 +55,7 @@ export default function App() {
   const [selectedConcept, setSelectedConcept] = useState<any | null>(null);
   const [showSignUp, setShowSignUp] = useState(false);
   const [showMemberArea, setShowMemberArea] = useState(false);
-  const [emailInput, setEmailInput] = useState('');
+  const [emailInput, setEmailInput] = useState(currentUser?.username || '');
   const [userInsights, setUserInsights] = useState('');
   const [userIntention, setUserIntention] = useState('');
   const [userFeedback, setUserFeedback] = useState('');
@@ -127,6 +127,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (currentUser?.username) {
+      setEmailInput(currentUser.username);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
     const fetchLexicon = async () => {
       try {
         const res = await fetch('/api/lexicon');
@@ -148,23 +154,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const initFromSession = async () => {
-      if (currentUser && !midwifeRef.current && lexicon.length > 0) {
-        console.log("Initializing Syncca from saved session...");
-        const learnedIds = currentUser.fields?.[AIRTABLE_SCHEMA.users.columns.learnedConcepts] || [];
-        const userSavedConcepts = lexicon.filter(l => learnedIds.includes(l.id));
-        
-        const service = new MidwifeService();
-        service.onNameUpdate = (name: string) => {
-          updateUserField('firstName', name);
-          setCurrentUser(prev => prev ? { ...prev, name } : null);
-        };
-        await service.init(userSavedConcepts, currentUser.name !== 'משתמש' ? currentUser.name : undefined);
-        midwifeRef.current = service;
-        setIsSessionActive(true);
-      }
-    };
-    initFromSession();
+    // We removed automatic session initialization to ensure users always see the landing page
+    // unless they explicitly start a session. This fixes the issue of skipping email registration.
   }, [currentUser, lexicon]);
 
   useEffect(() => {
@@ -471,7 +462,6 @@ export default function App() {
           userId: finalUserId,
           transcript: fullTranscript,
           conceptsApplied: conceptsFound, 
-          selfReview: 'Logged from client',
           timestamp: new Date().toISOString()
         })
       });
@@ -685,7 +675,7 @@ export default function App() {
             אנחנו כאן כדי לעזור לך להחליף את מאבקי הכוח שמכבים יום אחר יום את האהבה, בשפה של תקשורת ישירה ובוגרת, שרואה גם את עצמך וגם את האחר.
           </p>
           
-          <div className="flex justify-center mb-10">
+          <div className="flex flex-col items-center justify-center mb-10">
             <button
               onClick={handleInitialClick}
               className="bg-[#1e3a8a] hover:bg-[#162a63] text-white px-10 py-3 rounded-full font-bold transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center gap-3 border border-[#ea580c]/30"
@@ -693,6 +683,19 @@ export default function App() {
               <RefreshCcw className="w-4 h-4" />
               <span>שניכנס ל"סינק"?</span>
             </button>
+            
+            {currentUser && (
+              <button 
+                onClick={() => {
+                  localStorage.removeItem('syncca_user_session');
+                  setCurrentUser(null);
+                  setEmailInput('');
+                }}
+                className="mt-4 text-[#ea580c] text-xs hover:underline font-medium"
+              >
+                התנתקות מ-{currentUser.username}
+              </button>
+            )}
           </div>
           
           <p className="text-[10px] text-[#ea580c] uppercase tracking-[0.2em] font-mono font-bold">
@@ -751,6 +754,19 @@ export default function App() {
               </div>
             )}
           </div>
+
+          <button 
+            onClick={() => {
+              localStorage.removeItem('syncca_user_session');
+              setCurrentUser(null);
+              setIsSessionActive(false);
+              window.location.reload();
+            }}
+            className="p-2 hover:bg-red-50 rounded-full transition-colors relative group"
+          >
+            <LogOut className="w-5 h-5 text-red-400" />
+            <span className="absolute top-full right-0 mt-2 whitespace-nowrap bg-red-600 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">התנתקות</span>
+          </button>
 
           <button 
             onClick={() => setShowMemberArea(true)}
@@ -1117,7 +1133,11 @@ export default function App() {
                     Syncca Beta v1.1 • {lexicon.length} Concepts Loaded • Sync: {lastSyncStatus}
                   </div>
                   <button 
-                    onClick={() => window.location.reload()}
+                    onClick={() => {
+                      localStorage.removeItem('syncca_user_session');
+                      setCurrentUser(null);
+                      window.location.reload();
+                    }}
                     className="flex items-center gap-2 text-xs text-red-400 hover:text-red-500 transition-colors font-medium"
                   >
                     <LogOut className="w-4 h-4" />
@@ -1229,16 +1249,30 @@ export default function App() {
                     המערכת מבוססת על מודל בינה מלאכותית שאומן עם מתודולוגיה של תקשורת בין אישית וזוגית שפותח במשך עשרים שנים.
                   </p>
                 </div>
-                
+
                 <div className="flex gap-4">
                   <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-900 font-serif">2</div>
+                  <p className="text-blue-900 leading-relaxed">
+                    במהלך השיחה יופיעו מושגים בסוגריים מרובעים [ככה]. לחיצה עליהם תפתח הסבר שיעזור לך להעמיק בשפה של "זוגיות נקייה".
+                  </p>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-900 font-serif">3</div>
+                  <p className="text-blue-900 leading-relaxed">
+                    כל מושג שתשמרו יחכה לכם ב**מרחב האישי** שלכם (לחיצה על גלגל השיניים בראש המסך), שם תוכלו לחזור אליהם בכל זמן ולבנות את ארגז הכלים שלכם.
+                  </p>
+                </div>
+                
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-900 font-serif">4</div>
                   <p className="text-blue-900 leading-relaxed">
                     כל שיחה מוגבלת ל-**30 דקות**. זהו זמן המיועד להתבוננות ממוקדת ולעידוד חשיבה עצמאית.
                   </p>
                 </div>
                 
                 <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-900 font-serif">3</div>
+                  <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-900 font-serif">5</div>
                   <p className="text-blue-900 leading-relaxed">
                     הפידבק שלך עוזר לנו לצמוח. בסיום השיחה, נשמח לשמוע מה היית מציע/ה להוסיף, להוריד או לשנות ב-Syncca.
                   </p>

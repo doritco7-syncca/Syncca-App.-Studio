@@ -57,7 +57,8 @@ PERSONALITY:
 - עברית טבעית: הימנעי מניסוחים רשמיים מדי. השתמשי ב"וואלה" רק פעם אחת בשיחה, לא בתחילת כל משפט. גווני עם מילות קישור אחרות כמו "תשמע/י", "קטע", "מעניין", "אני מבינה".
 
 INTERACTION LOGIC:
-- When you use a professional term from the lexicon, you can occasionally offer: "רוצה לשמור את המושג הזה בכרטיס האישי שלך?".
+- When you introduce a professional term from the lexicon for the first time, briefly explain that the user can click on it to see the definition and save it to their **Personal Space** (המרחב האישי - גלגל השיניים בראש המסך) to build their own toolkit.
+- Example: "אני משתמשת כאן במושג [[הסטה ביולוגית]]. את יכולה ללחוץ עליו כדי להבין מה זה אומר, ואפילו לשמור אותו ל'מרחב האישי' שלך (למעלה בגלגל השיניים) כדי שיהיה לך זמין תמיד."
 - DYNAMIC USER NAME UPDATE: If a user introduces themselves by name (e.g., "היי, אני שרה" or "קוראים לי דני"), you MUST call the 'updateUserName' tool with their first name. From that moment on, use their name to create a more personal and supportive atmosphere.
 
 STRICT PROTOCOL: THE SILENT START
@@ -388,7 +389,7 @@ app.post("/api/logs", async (req, res) => {
       return res.status(500).send("Airtable configuration missing on server");
     }
     
-    const { userId, transcript, conceptsApplied, selfReview } = req.body;
+    const { userId, transcript, conceptsApplied } = req.body;
     console.log("Received log request for userId:", userId);
     
     if (!userId) {
@@ -398,27 +399,18 @@ app.post("/api/logs", async (req, res) => {
     // Only add fields if they have a non-empty value
     if (transcript) fields[cols.transcript] = transcript;
     
-    // Only add user link if it's a valid Airtable record ID (starts with 'rec')
+    // Link to user - Airtable accepts both record IDs (rec...) and primary field values (emails)
     if (userId) {
-      if (typeof userId === 'string' && userId.startsWith('rec')) {
+      if (typeof userId === 'string') {
         fields[cols.userLink] = [userId];
       } else if (Array.isArray(userId)) {
-        const validIds = userId.filter(id => typeof id === 'string' && id.startsWith('rec'));
-        if (validIds.length > 0) {
-          fields[cols.userLink] = validIds;
-        }
+        fields[cols.userLink] = userId;
       }
     }
 
     // Be extremely careful with these fields - they might be problematic in some Airtable setups
     if (conceptsApplied && typeof conceptsApplied === 'string' && conceptsApplied.trim()) {
       fields[cols.conceptsApplied] = conceptsApplied;
-    }
-    
-    // For these fields, let's be even safer. If they are empty strings, don't send them.
-    // Also check if they are expected to be something else (like numbers or booleans)
-    if (selfReview && typeof selfReview === 'string' && selfReview.trim()) {
-      fields[cols.selfReview] = selfReview;
     }
     
     console.log("Creating Airtable log in table:", tableName);

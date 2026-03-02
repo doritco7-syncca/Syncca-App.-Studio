@@ -7,7 +7,7 @@ const AIRTABLE_SCHEMA = {
     columns: {
       userLink: "User_Link",
       transcript: "Full_Transcript",
-      conceptsApplied: "Concepts_Applied",         
+      conceptsApplied: "Concepts_Applied",
       createdAt: "Created_At"
     }
   }
@@ -43,14 +43,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const fields: any = {
       [AIRTABLE_SCHEMA.logs.columns.transcript]: transcript,
       [AIRTABLE_SCHEMA.logs.columns.conceptsApplied]: conceptsApplied || "",
-          [AIRTABLE_SCHEMA.logs.columns.createdAt]: timestamp || new Date().toISOString()
+      [AIRTABLE_SCHEMA.logs.columns.createdAt]: timestamp || new Date().toISOString()
     };
 
-    // Only add userLink if userId looks like an Airtable record ID (starts with 'rec')
-    if (userId.startsWith('rec')) {
+    // Link to user - Airtable accepts both record IDs (rec...) and primary field values (emails)
+    if (userId) {
       fields[AIRTABLE_SCHEMA.logs.columns.userLink] = [userId];
-    } else {
-      console.log("userId is not a record ID, skipping link:", userId);
     }
 
     await base(targetTable).create([{ fields }]);
