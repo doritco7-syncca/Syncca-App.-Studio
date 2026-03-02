@@ -181,11 +181,25 @@ export default function App() {
   };
 
   const submitFeedback = async () => {
-    if (!feedbackInput.trim() || !userIdRef.current) return;
+    if (!feedbackInput.trim()) return;
     
     setIsSubmittingFeedback(true);
     try {
-      await updateUserField('feedback', feedbackInput);
+      // 1. Update user record (existing logic)
+      if (userIdRef.current) {
+        await updateUserField('feedback', feedbackInput);
+      }
+      
+      // 2. Add to dedicated Feedbacks table
+      await fetch('/api/feedbacks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: currentUser?.username || 'unknown',
+          content: feedbackInput 
+        })
+      });
+
       setShowFeedbackModal(false);
       window.location.reload(); // Refresh to start new session after feedback
     } catch (e) {
@@ -379,7 +393,7 @@ export default function App() {
       } else {
         // Fallback for preview mode
         console.warn("Airtable API failed, using fallback for preview");
-        userData = { id: 'preview-user', fields: { [AIRTABLE_SCHEMA.users.columns.firstName]: 'אורח' } };
+        userData = { id: 'preview-user', fields: { [AIRTABLE_SCHEMA.users.columns.firstName]: 'משתמש' } };
       }
 
       const firstName = userData.fields?.[AIRTABLE_SCHEMA.users.columns.firstName] || 'משתמש';
@@ -606,29 +620,8 @@ export default function App() {
                     </>
                   )}
                 </button>
-                
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmailInput('guest@syncca.com');
-                    setTimeout(() => {
-                      const form = document.querySelector('form');
-                      if (form) form.requestSubmit();
-                    }, 100);
-                  }}
-                  className="text-orange-400 text-xs hover:text-orange-600 transition-colors underline underline-offset-4"
-                >
-                  המשך כאורח (ללא שמירת נתונים)
-                </button>
               </div>
             </form>
-            
-            <div className="mt-8 pt-6 border-t border-orange-100">
-              <button className="w-full bg-white border border-orange-200 hover:bg-orange-50 text-orange-500 py-3 rounded-full text-xs font-medium transition-all flex items-center justify-center gap-2">
-                <img src="https://www.google.com/favicon.ico" className="w-3 h-3 grayscale opacity-70" alt="Google" />
-                התחברות עם Google
-              </button>
-            </div>
             
             {airtableStatus !== 'Connected Successfully' && airtableStatus !== 'checking' && (
               <div className="mt-4 p-3 bg-red-50 rounded-2xl border border-red-100 flex items-center gap-3">

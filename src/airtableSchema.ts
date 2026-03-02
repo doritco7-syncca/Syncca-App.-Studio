@@ -121,5 +121,13 @@ Whenever you use a term from the KNOWLEDGE BASE (Relationship_Lexicon), you MUST
       conceptsApplied: "Concepts_Applied",
       createdAt: "Created_At"
     }
+  },
+  feedbacks: {
+    tableName: "Feedbacks",
+    columns: {
+      userEmail: "User_Email",
+      content: "Feedback_Content",
+      createdAt: "Created"
+    }
   }
 };
