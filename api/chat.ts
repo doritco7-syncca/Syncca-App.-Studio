@@ -1,6 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Airtable from "airtable";
 
 const SYSTEM_INSTRUCTION = `
 CORE DIRECTIVE: CONCEPT LINKING
@@ -109,39 +108,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     const ai = new GoogleGenAI({ apiKey });
     
-    // Fetch lexicon for context (optional but helpful)
-    let lexiconContext = "";
-    try {
-      const airtableKey = process.env.AIRTABLE_API_KEY;
-      const airtableBaseId = process.env.AIRTABLE_BASE_ID;
-      if (airtableKey && airtableBaseId) {
-        const base = new Airtable({ apiKey: airtableKey }).base(airtableBaseId);
-        const records = await base("Relationship_Lexicon").select({ maxRecords: 100 }).all();
-        const terms = records.map(r => r.get("Hebrew_Term")).filter(Boolean);
-        if (terms.length > 0) {
-          lexiconContext = `\nAVAILABLE CONCEPTS (Wrap these in [[ ]] when used):\n${terms.join(', ')}\n`;
-        }
-      }
-    } catch (e) {
-      console.warn("Failed to fetch lexicon for chat context", e);
-    }
+    // We'll rely on the SYSTEM_INSTRUCTION's internal knowledge of concepts
+    // instead of fetching them from Airtable on every request to save time.
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: [...(history || []), { role: 'user', parts: [{ text: message }] }],
-      config: { 
-        systemInstruction: (userName ? `USER_NAME: ${userName}\n` : "") + lexiconContext + SYSTEM_INSTRUCTION,
-        temperature: 0.7,
-        topP: 0.95,
-        topK: 40,
-        safetySettings: [
-          { category: "HARM_CATEGORY_HATE_SPEECH" as any, threshold: "BLOCK_NONE" as any },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT" as any, threshold: "BLOCK_NONE" as any },
-          { category: "HARM_CATEGORY_HARASSMENT" as any, threshold: "BLOCK_NONE" as any },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT" as any, threshold: "BLOCK_NONE" as any }
-        ]
-      },
-    });
+    const isStartMessage = message === "START_SESSION_NEW_OR_RETURNING";
+    const modelToUse = isStartMessage ? "gemini-1.5-flash" : "gemini-3-flash-preview";
+    
+    let response;
+    try {
+      response = await ai.models.generateContent({
+        model: modelToUse,
+        contents: [...(history || []), { role: 'user', parts: [{ text: message }] }],
+        config: { 
+          systemInstruction: (userName ? `USER_NAME: ${userName}\n` : "") + SYSTEM_INSTRUCTION,
+          temperature: 0.7,
+          topP: 0.95,
+          topK: 40,
+          thinkingConfig: modelToUse.includes("gemini-3") ? { thinkingLevel: "LOW" as any } : undefined,
+          safetySettings: [
+            { category: "HARM_CATEGORY_HATE_SPEECH" as any, threshold: "BLOCK_NONE" as any },
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT" as any, threshold: "BLOCK_NONE" as any },
+            { category: "HARM_CATEGORY_HARASSMENT" as any, threshold: "BLOCK_NONE" as any },
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT" as any, threshold: "BLOCK_NONE" as any }
+          ]
+        },
+      });
+    } catch (e: any) {
+      console.warn(`${modelToUse} failed, falling back to 1.5 Flash:`, e.message);
+      if (modelToUse !== "gemini-1.5-flash") {
+        response = await ai.models.generateContent({
+          model: "gemini-1.5-flash",
+          contents: [...(history || []), { role: 'user', parts: [{ text: message }] }],
+          config: { 
+            systemInstruction: (userName ? `USER_NAME: ${userName}\n` : "") + SYSTEM_INSTRUCTION,
+            temperature: 0.7,
+            topP: 0.95,
+            topK: 40,
+            safetySettings: [
+              { category: "HARM_CATEGORY_HATE_SPEECH" as any, threshold: "BLOCK_NONE" as any },
+              { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT" as any, threshold: "BLOCK_NONE" as any },
+              { category: "HARM_CATEGORY_HARASSMENT" as any, threshold: "BLOCK_NONE" as any },
+              { category: "HARM_CATEGORY_DANGEROUS_CONTENT" as any, threshold: "BLOCK_NONE" as any }
+            ]
+          },
+        });
+      } else {
+        throw e;
+      }
+    }
 
     console.log("Gemini response received.");
     const responseText = response.text || "אני כאן איתך, מקשיבה. תרצי להמשיך?";

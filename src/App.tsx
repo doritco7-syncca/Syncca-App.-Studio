@@ -74,7 +74,7 @@ export default function App() {
   const runAirtableTest = async () => {
     try {
       setLastSyncStatus('idle');
-      const res = await fetch('/api/test-airtable');
+      const res = await fetch('/api/health');
       if (!res.ok) {
         const text = await res.text();
         setDebugInfo({ error: `Server returned ${res.status}`, detail: text.substring(0, 100) });
@@ -82,9 +82,16 @@ export default function App() {
       }
       const data = await res.json();
       setDebugInfo(data);
-      console.log("Airtable Test Results:", data);
+      console.log("Health Check Results:", data);
+      
+      if (data.airtable?.status === "Connected Successfully" && data.gemini?.status === "Connected Successfully") {
+        setLastSyncStatus('success');
+      } else {
+        setLastSyncStatus('error');
+      }
     } catch (e: any) {
       setDebugInfo({ error: "Fetch failed", message: e.message });
+      setLastSyncStatus('error');
     }
   };
   const [sessionId] = useState(() => Math.random().toString(36).substring(7));
@@ -736,6 +743,14 @@ export default function App() {
               )}>
                 SYNC: {lastSyncStatus}
               </span>
+              {debugInfo?.gemini && (
+                <span className={cn(
+                  "text-[9px] font-mono uppercase tracking-tighter",
+                  debugInfo.gemini.status === "Connected Successfully" ? "text-emerald-600" : "text-red-600"
+                )}>
+                  AI: {debugInfo.gemini.status === "Connected Successfully" ? "OK" : "ERR"}
+                </span>
+              )}
               <button 
                 onClick={runAirtableTest}
                 className="text-[9px] font-mono uppercase tracking-tighter text-blue-400 hover:text-blue-600 underline"
@@ -744,8 +759,15 @@ export default function App() {
               </button>
             </div>
             {debugInfo && (
-              <div className="text-[8px] font-mono text-blue-300 max-w-[150px] truncate text-left" dir="ltr">
-                UID: {userIdRef.current?.substring(0, 8)}... | {JSON.stringify(debugInfo)}
+              <div className="text-[8px] font-mono text-blue-300 max-w-[250px] overflow-hidden text-left" dir="ltr">
+                {debugInfo.error ? (
+                  <span className="text-red-400">ERR: {debugInfo.error}</span>
+                ) : (
+                  <span>
+                    A: {debugInfo.airtable?.status?.includes("Successfully") ? "OK" : "ERR"} | 
+                    G: {debugInfo.gemini?.status?.includes("Successfully") ? "OK" : "ERR"}
+                  </span>
+                )}
               </div>
             )}
           </div>

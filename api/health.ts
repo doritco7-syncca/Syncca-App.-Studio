@@ -10,11 +10,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (airtableKey && airtableBaseId) {
     try {
       const base = new Airtable({ apiKey: airtableKey }).base(airtableBaseId);
-      // Try to fetch just one record to verify connectivity
       await base("Relationship_Lexicon").select({ maxRecords: 1 }).firstPage();
       airtableStatus = "Connected Successfully";
     } catch (e: any) {
       airtableStatus = `Configuration Error: ${e.message}`;
+    }
+  }
+
+  let geminiStatus = "Not Configured";
+  if (geminiKey) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: geminiKey });
+      await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: "hi",
+        config: { maxOutputTokens: 1 }
+      });
+      geminiStatus = "Connected Successfully";
+    } catch (e: any) {
+      geminiStatus = `Configuration Error: ${e.message}`;
     }
   }
 
@@ -25,6 +39,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       status: airtableStatus,
       keyPresent: !!airtableKey,
       basePresent: !!airtableBaseId
+    },
+    gemini: {
+      status: geminiStatus,
+      keyPresent: !!geminiKey
     },
     env: {
       airtable: !!airtableKey,
