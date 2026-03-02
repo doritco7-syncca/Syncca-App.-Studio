@@ -23,7 +23,7 @@ const getBase = () => {
   const apiKey = process.env.AIRTABLE_API_KEY || process.env.VITE_AIRTABLE_API_KEY;
   const baseId = process.env.AIRTABLE_BASE_ID || process.env.VITE_AIRTABLE_BASE_ID;
   if (!apiKey || !baseId) return null;
-  return new Airtable({ apiKey, requestTimeout: 5000 }).base(baseId);
+  return new Airtable({ apiKey, requestTimeout: 15000 }).base(baseId);
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

@@ -30,7 +30,7 @@ export class MidwifeService {
 
   async sendMessage(message: string) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
 
     try {
       const response = await fetch('/api/chat', {

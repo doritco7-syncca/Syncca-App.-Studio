@@ -114,49 +114,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const isStartMessage = message === "START_SESSION_NEW_OR_RETURNING";
     const modelToUse = "gemini-flash-latest";
     
-    console.log(`Attempting to use model: ${modelToUse} for message: ${message.substring(0, 20)}...`);
+    console.log(`[Chat] Using model: ${modelToUse}. Start message: ${isStartMessage}`);
+    const startTime = Date.now();
     
     let response;
     try {
+      const chatHistory = history || [];
+      console.log(`[Chat] History length: ${chatHistory.length}`);
+      
       response = await ai.models.generateContent({
         model: modelToUse,
-        contents: [...(history || []), { role: 'user', parts: [{ text: message }] }],
+        contents: [...chatHistory, { role: 'user', parts: [{ text: message }] }],
         config: { 
           systemInstruction: (userName ? `USER_NAME: ${userName}\n` : "") + SYSTEM_INSTRUCTION,
           temperature: 0.7,
-          topP: 0.95,
+          topP: 0.9,
           topK: 40,
-          safetySettings: [
-            { category: "HARM_CATEGORY_HATE_SPEECH" as any, threshold: "BLOCK_NONE" as any },
-            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT" as any, threshold: "BLOCK_NONE" as any },
-            { category: "HARM_CATEGORY_HARASSMENT" as any, threshold: "BLOCK_NONE" as any },
-            { category: "HARM_CATEGORY_DANGEROUS_CONTENT" as any, threshold: "BLOCK_NONE" as any }
-          ]
+          maxOutputTokens: 1024,
         },
       });
+      console.log(`[Chat] Gemini responded in ${Date.now() - startTime}ms`);
     } catch (e: any) {
-      console.warn(`${modelToUse} failed, falling back to gemini-flash-latest:`, e.message);
-      try {
-        response = await ai.models.generateContent({
-          model: "gemini-flash-latest",
-          contents: [...(history || []), { role: 'user', parts: [{ text: message }] }],
-          config: { 
-            systemInstruction: (userName ? `USER_NAME: ${userName}\n` : "") + SYSTEM_INSTRUCTION,
-            temperature: 0.7,
-            topP: 0.95,
-            topK: 40,
-            safetySettings: [
-              { category: "HARM_CATEGORY_HATE_SPEECH" as any, threshold: "BLOCK_NONE" as any },
-              { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT" as any, threshold: "BLOCK_NONE" as any },
-              { category: "HARM_CATEGORY_HARASSMENT" as any, threshold: "BLOCK_NONE" as any },
-              { category: "HARM_CATEGORY_DANGEROUS_CONTENT" as any, threshold: "BLOCK_NONE" as any }
-            ]
-          },
-        });
-      } catch (fallbackError: any) {
-        console.error("Fallback model also failed:", fallbackError.message);
-        throw fallbackError;
-      }
+      console.warn(`[Chat] ${modelToUse} failed:`, e.message);
+      // Fallback logic if needed, but gemini-flash-latest is already the fallback
+      throw e;
     }
 
     console.log("Gemini response received.");

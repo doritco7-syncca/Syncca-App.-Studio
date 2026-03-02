@@ -11,18 +11,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let feedbackTableStatus = "Not Checked";
   if (airtableKey && airtableBaseId) {
     try {
-      const base = new Airtable({ apiKey: airtableKey }).base(airtableBaseId);
+      const base = new Airtable({ apiKey: airtableKey, requestTimeout: 15000 }).base(airtableBaseId);
       await base("Relationship_Lexicon").select({ maxRecords: 1 }).firstPage();
       airtableStatus = "Connected Successfully";
       
       // Check feedback table
       try {
-        await base("Feedbacks").select({ maxRecords: 1 }).firstPage();
-        feedbackTableStatus = "Feedbacks Table OK";
+        const fbTable = await base("Feedbacks").select({ maxRecords: 1 }).firstPage();
+        feedbackTableStatus = `Feedbacks Table OK (${fbTable.length} recs)`;
       } catch (e1) {
         try {
-          await base("Feedback").select({ maxRecords: 1 }).firstPage();
-          feedbackTableStatus = "Feedback Table OK";
+          const fbTable = await base("Feedback").select({ maxRecords: 1 }).firstPage();
+          feedbackTableStatus = `Feedback Table OK (${fbTable.length} recs)`;
         } catch (e2) {
           feedbackTableStatus = "Feedback Table Not Found";
         }
