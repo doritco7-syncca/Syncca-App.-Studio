@@ -553,7 +553,7 @@ app.post("/api/chat", async (req, res) => {
       ? `\nAVAILABLE CONCEPTS (Wrap these in [[ ]] when used):\n${lexicon.map(l => l.hebrew_term).join(', ')}\n`
       : "";
 
-    const modelName = "gemini-3.1-flash-latest";
+    const modelName = "gemini-3-flash-preview";
     console.log(`Starting chat with model: ${modelName}`);
     
     // Add safety settings to avoid false positives in relationship advice

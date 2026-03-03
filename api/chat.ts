@@ -79,7 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ai = new GoogleGenAI({ apiKey });
     
     const isStartMessage = message === "START_SESSION_NEW_OR_RETURNING";
-    const modelToUse = "gemini-3.1-flash-latest";
+    const modelToUse = "gemini-3-flash-preview";
     
     console.log(`[Chat] Using model: ${modelToUse}. Start message: ${isStartMessage}`);
     const startTime = Date.now();
