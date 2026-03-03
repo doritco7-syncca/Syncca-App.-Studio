@@ -9,7 +9,8 @@ const AIRTABLE_SCHEMA = {
       transcript: "Full_Transcript",
       conceptsApplied: "Concepts_Applied",
       createdAt: "Created_At",
-      sessionId: "Session_ID"
+      sessionId: "Session_ID",
+      feedback: "Feedback"
     }
   }
 };
@@ -28,7 +29,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const base = getBase();
     if (!base) throw new Error("Airtable not configured");
     
-    const { userId, transcript, conceptsApplied, timestamp, sessionId } = req.body;
+    const { userId, transcript, conceptsApplied, timestamp, sessionId, feedback } = req.body;
+    console.log(`[Logs] Received log request. Feedback: "${feedback}"`);
     
     // Validate userId
     if (!userId) {
@@ -44,6 +46,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (sessionId) {
       fields[AIRTABLE_SCHEMA.logs.columns.sessionId] = sessionId;
+    }
+
+    if (feedback !== undefined && feedback !== null) {
+      fields[AIRTABLE_SCHEMA.logs.columns.feedback] = feedback;
     }
 
     // Link to user - only if it's a real Airtable ID (usually starts with 'rec')

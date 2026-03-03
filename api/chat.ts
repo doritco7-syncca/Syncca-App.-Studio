@@ -79,7 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ai = new GoogleGenAI({ apiKey });
     
     const isStartMessage = message === "START_SESSION_NEW_OR_RETURNING";
-    const modelToUse = "gemini-3-flash-preview";
+    const modelToUse = "gemini-3.1-flash-latest";
     
     console.log(`[Chat] Using model: ${modelToUse}. Start message: ${isStartMessage}`);
     const startTime = Date.now();
@@ -106,8 +106,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
         ];
 
+        const currentModel = attempts === maxAttempts ? "gemini-3-flash-preview" : modelToUse;
+        console.log(`[Chat] Attempt ${attempts} using model: ${currentModel}`);
+
         response = await ai.models.generateContent({
-          model: modelToUse,
+          model: currentModel,
           contents: [...chatHistory, { role: 'user', parts: [{ text: message }] }],
           config: { 
             systemInstruction: (userName ? `USER_NAME: ${userName}\n` : "") + genderInstruction + SYSTEM_INSTRUCTION,
