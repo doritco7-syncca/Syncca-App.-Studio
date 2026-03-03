@@ -16,23 +16,28 @@ export class MidwifeService {
     this.savedConcepts = savedConcepts;
     this.userGender = userGender;
     
+    // Don't block initialization on lexicon fetch
+    this.fetchLexicon().catch(e => console.error("Background lexicon fetch failed", e));
+    console.log("Syncca service initialized (lexicon fetch started in background)");
+  }
+
+  private async fetchLexicon() {
     try {
-      // Try to load lexicon for context
       if (this.lexicon.length === 0) {
         const lexiconRes = await fetch('/api/lexicon');
         if (lexiconRes.ok) {
           this.lexicon = await lexiconRes.json();
+          console.log(`Lexicon loaded: ${this.lexicon.length} terms`);
         }
       }
-      console.log("Syncca service initialized");
     } catch (e) {
-      console.error("Failed to initialize Syncca service", e);
+      console.error("Failed to load lexicon", e);
     }
   }
 
   async sendMessage(message: string) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
 
     try {
       const response = await fetch('/api/chat', {

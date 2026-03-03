@@ -137,10 +137,20 @@ Whenever you use a term from the KNOWLEDGE BASE (Relationship_Lexicon), you MUST
     tableName: "Conversation_Logs",
     columns: {
       logId: "Log_ID",
+      sessionId: "Session_ID",
       userLink: "User_Link",
       transcript: "Full_Transcript",
       conceptsApplied: "Concepts_Applied",
+      feedback: "User_Feedback",
       createdAt: "Created_At"
+    }
+  },
+  feedbacks: {
+    tableName: "Feedbacks",
+    columns: {
+      userEmail: "User_Email",
+      content: "Feedback_Content",
+      createdAt: "Created"
     }
   }
 };
@@ -179,7 +189,7 @@ const getBase = () => {
     console.log(`Initializing Airtable with Base ID: ${baseId.substring(0, 5)}... and API Key: ${apiKey.substring(0, 5)}...`);
     airtableBase = new Airtable({ 
       apiKey,
-      requestTimeout: 5000 // Very aggressive 5s timeout
+      requestTimeout: 15000 // Increased to 15s
     }).base(baseId);
     return airtableBase;
   } catch (e) {
@@ -259,6 +269,7 @@ app.get("/api/lexicon", async (req, res) => {
 });
 
 app.post("/api/users", async (req, res) => {
+  const startTime = Date.now();
   try {
     const base = getBase();
     if (!base) {
@@ -269,21 +280,26 @@ app.post("/api/users", async (req, res) => {
     }
     
     const { username, fullName } = req.body;
-    console.log("Managing user for username:", username);
+    console.log(`[UserMgmt] Request for: ${username}. Time: ${new Date().toISOString()}`);
     const tableName = AIRTABLE_SCHEMA.users.tableName;
     const cols = AIRTABLE_SCHEMA.users.columns;
     
     const formula = `{${cols.username}} = '${username}'`;
     
+    console.log(`[UserMgmt] Searching Airtable with formula: ${formula}`);
     const existing = await base(tableName).select({
-      filterByFormula: formula
+      filterByFormula: formula,
+      maxRecords: 1
     }).firstPage();
+
+    console.log(`[UserMgmt] Search completed in ${Date.now() - startTime}ms. Found: ${existing.length > 0}`);
 
     if (existing.length > 0) {
       res.json({ id: existing[0].id, fields: existing[0].fields });
       return;
     }
 
+    console.log(`[UserMgmt] Creating new user record...`);
     const record = await base(tableName).create([
       {
         fields: {
@@ -292,9 +308,10 @@ app.post("/api/users", async (req, res) => {
         }
       }
     ]);
+    console.log(`[UserMgmt] User created in ${Date.now() - startTime}ms. ID: ${record[0].id}`);
     res.json({ id: record[0].id, fields: record[0].fields });
   } catch (error: any) {
-    console.error("Error managing user in Airtable:", error);
+    console.error(`[UserMgmt] FAILED after ${Date.now() - startTime}ms:`, error);
     res.status(500).json({ 
       error: "Failed to manage user", 
       message: error.message,
@@ -390,7 +407,7 @@ app.post("/api/logs", async (req, res) => {
       return res.status(500).send("Airtable configuration missing on server");
     }
     
-    const { userId, transcript, conceptsApplied } = req.body;
+    const { userId, transcript, conceptsApplied, sessionId, feedback } = req.body;
     console.log("Received log request for userId:", userId);
     
     if (!userId) {
@@ -399,6 +416,8 @@ app.post("/api/logs", async (req, res) => {
 
     // Only add fields if they have a non-empty value
     if (transcript) fields[cols.transcript] = transcript;
+    if (sessionId) fields[cols.sessionId] = sessionId;
+    if (feedback) fields[cols.feedback] = feedback;
     
     // Link to user - Airtable accepts both record IDs (rec...) and primary field values (emails)
     if (userId && typeof userId === 'string') {
@@ -451,35 +470,22 @@ app.post("/api/feedbacks", async (req, res) => {
     if (!base) throw new Error("Airtable not configured");
     
     const { email, content } = req.body;
-    const tableName = "Feedbacks";
-    const tableNames = [tableName, "Feedback", "Feedbacks"];
-    const uniqueTableNames = [...new Set(tableNames)];
+    const tableName = AIRTABLE_SCHEMA.feedbacks.tableName;
+    const cols = AIRTABLE_SCHEMA.feedbacks.columns;
     
-    let lastError = null;
-    for (const tName of uniqueTableNames) {
-      try {
-        console.log(`Attempting to save feedback to table: ${tName}`);
-        const fields: any = {
-          "Feedback_Content": content,
-          "User_Email": email || ""
-        };
-        
-        try {
-          const record = await base(tName).create([{ fields }]);
-          return res.json({ id: record[0].id, success: true, table: tName });
-        } catch (e: any) {
-          console.warn(`Initial save failed for ${tName}: ${e.message}`);
-          // Fallback to simpler field names
-          const altFields: any = { "Content": content };
-          if (email) altFields["Email"] = email;
-          const record = await base(tName).create([{ fields: altFields }]);
-          return res.json({ id: record[0].id, success: true, table: tName, alt: true });
-        }
-      } catch (e: any) {
-        lastError = e;
-      }
+    console.log(`Attempting to save feedback for ${email} to table: ${tableName}`);
+    const fields: any = {
+      [cols.content]: content,
+      [cols.userEmail]: email || ""
+    };
+    
+    try {
+      const record = await base(tableName).create([{ fields }]);
+      return res.json({ id: record[0].id, success: true, table: tableName });
+    } catch (e: any) {
+      console.error(`Feedback save failed: ${e.message}`);
+      throw e;
     }
-    throw lastError || new Error("Failed to save feedback");
   } catch (error: any) {
     console.error("Feedback error:", error);
     res.status(500).json({ error: error.message });
@@ -519,9 +525,16 @@ app.get("/api/test-airtable", async (req, res) => {
       results.logs = { 
         status: "error", 
         message: e.message, 
-        tableName: AIRTABLE_SCHEMA.logs.tableName,
-        hint: "Check if the table name matches exactly in Airtable (case sensitive, no extra spaces)."
+        tableName: AIRTABLE_SCHEMA.logs.tableName
       };
+    }
+
+    // Test Feedbacks
+    try {
+      const feedbacks = await base(AIRTABLE_SCHEMA.feedbacks.tableName).select({ maxRecords: 1 }).firstPage();
+      results.feedbacks = { status: "ok", count: feedbacks.length, tableName: AIRTABLE_SCHEMA.feedbacks.tableName };
+    } catch (e: any) {
+      results.feedbacks = { status: "error", message: e.message, tableName: AIRTABLE_SCHEMA.feedbacks.tableName };
     }
     
     res.json(results);
@@ -536,6 +549,13 @@ app.post("/api/chat", async (req, res) => {
   try {
     const { message, history, userName, userGender, savedConcepts } = req.body;
     console.log(`User: ${userName || 'anonymous'}, Gender: ${userGender || 'unknown'}, Message: ${message?.substring(0, 50)}...`);
+
+    // Hardcoded welcome message to speed up startup and satisfy user request
+    if (message === "START_SESSION_NEW_OR_RETURNING") {
+      const welcomeMsg = "היי, אני סינקה. אני כאן כדי לעזור לך להחליף את ה'מלחמות' היומיומיות בשפה של קירבה וחופש. במקום לתת לך פתרונות מוכנים, אני אעזור לך לעצור, לחשוב יחד ולמצוא בעצמך את התשובות המדויקות לך. מה יושב לך על הלב ברגע זה?";
+      console.log("Returning hardcoded welcome message immediately");
+      return res.status(200).json({ text: welcomeMsg });
+    }
     
     const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || process.env.VITE_GEMINI_API_KEY;
     if (!apiKey || apiKey === "undefined" || apiKey.length < 10) {
@@ -573,7 +593,7 @@ app.post("/api/chat", async (req, res) => {
       ? `\nAVAILABLE CONCEPTS (Wrap these in [[ ]] when used):\n${lexicon.map(l => l.hebrew_term).join(', ')}\n`
       : "";
 
-    const modelName = "gemini-3.1-pro-preview";
+    const modelName = "gemini-3-flash-preview";
     console.log(`Starting chat with model: ${modelName}`);
     
     // Add safety settings to avoid false positives in relationship advice

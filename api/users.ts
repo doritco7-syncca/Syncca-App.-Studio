@@ -8,13 +8,13 @@ const AIRTABLE_SCHEMA = {
       username: "Username",
       fullName: "full name",
       firstName: "first name",
+      maritalStatus: "marital status",
+      ageRange: "Age Range",
+      gender: "Gender",
       learnedConcepts: "Relationship_Lexicon",
       insights: "Insights",
       intention: "Intention",
-      feedback: "Feedback",
-      maritalStatus: "marital status",
-      ageRange: "Age Range",
-      gender: "Gender"
+      feedback: "Feedback"
     }
   }
 };

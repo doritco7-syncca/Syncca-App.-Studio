@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Heart, ShieldAlert, Clock, RefreshCcw, User, Sparkles, Bookmark, X, Settings, MessageSquare, PenTool, LogOut, Activity } from 'lucide-react';
+import { Send, Heart, ShieldAlert, Clock, RefreshCcw, User, Sparkles, Bookmark, X, Settings, MessageSquare, PenTool, LogOut, Activity, Save, CheckCircle2 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -70,6 +70,8 @@ export default function App() {
   const [feedbackInput, setFeedbackInput] = useState('');
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const runAirtableTest = async () => {
     try {
@@ -187,6 +189,30 @@ export default function App() {
     }
   };
 
+  const handleSaveProfile = async () => {
+    if (!userIdRef.current) return;
+    setIsSavingProfile(true);
+    setSaveSuccess(false);
+    try {
+      await Promise.all([
+        updateUserField('fullName', userFullName),
+        updateUserField('firstName', userFirstName),
+        updateUserField('maritalStatus', userMaritalStatus),
+        updateUserField('ageRange', userAgeRange),
+        updateUserField('gender', userGender),
+        updateUserField('intention', userIntention),
+        updateUserField('insights', userInsights),
+        updateUserField('feedback', userFeedback)
+      ]);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (e) {
+      console.error("Failed to save profile", e);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   const submitFeedback = async () => {
     if (!feedbackInput.trim()) return;
     
@@ -197,30 +223,18 @@ export default function App() {
         await updateUserField('feedback', feedbackInput);
       }
       
-      // 2. Add to dedicated Feedbacks table
-      console.log("Submitting feedback to API...", { email: currentUser?.username, content: feedbackInput });
-      const fbRes = await fetch('/api/feedbacks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          email: currentUser?.username || 'unknown',
-          content: feedbackInput 
-        })
-      });
+      // 2. Add to conversation logs table (which is more reliable)
+      const transcript = messages.map(m => `${m.role === 'user' ? 'User' : 'Syncca'}: ${m.content}`).join('\n\n');
+      await logToAirtable(transcript);
       
-      if (!fbRes.ok) {
-        const fbError = await fbRes.json().catch(() => ({}));
-        console.error("Feedback submission failed:", fbError);
-        alert("חלה שגיאה בשליחת הפידבק. אנא נסו שוב.");
-      } else {
-        const fbData = await fbRes.json();
-        console.log("Feedback submitted successfully:", fbData);
-        // Give a small moment for the user to see success if we had a toast, 
-        // but for now just ensure the reload happens AFTER the await.
-        window.location.reload(); 
-      }
+      console.log("Feedback submitted successfully to logs");
+      
+      // Give a small moment for the user to see success
+      alert("תודה על הפידבק! זה עוזר לנו מאוד להשתפר.");
+      window.location.reload(); 
     } catch (e) {
       console.error("Failed to submit feedback", e);
+      alert("חלה שגיאה בשליחת הפידבק. אנא נסו שוב.");
     } finally {
       setIsSubmittingFeedback(false);
     }
@@ -319,7 +333,7 @@ export default function App() {
                 )}
               >
                 {displayTerm}
-                <span className="hidden md:block absolute bottom-full left-1/2 -translate-x-1/2 mb-4 w-64 p-3 bg-white text-[#1a1a1a] text-xs rounded-xl shadow-2xl opacity-0 invisible group-hover/concept:opacity-100 group-hover/concept:visible pointer-events-none z-50 border border-orange-200 leading-relaxed whitespace-normal">
+                <span className="hidden md:block absolute bottom-full left-1/2 -translate-x-1/2 mb-4 w-64 p-3 bg-[#fdfbf7] text-[#1a1a1a] text-xs rounded-xl shadow-2xl opacity-0 invisible group-hover/concept:opacity-100 group-hover/concept:visible pointer-events-none z-50 border border-orange-200 leading-relaxed whitespace-normal">
                   <div className="flex justify-between items-start mb-1">
                     <strong className="text-orange-800 font-bold">{concept.hebrew_term || concept.term}</strong>
                     {isSaved && <span className="text-[10px] text-orange-600 font-normal">Saved</span>}
@@ -453,7 +467,7 @@ export default function App() {
         {
           id: 'welcome',
           role: 'assistant',
-          content: welcomeResponse || 'היי, אני כאן. מה על הלב שלך היום?',
+          content: welcomeResponse || 'היי, אני סינקה. אני כאן כדי לעזור לך להחליף את ה\'מלחמות\' היומיומיות בשפה של קירבה וחופש. במקום לתת לך פתרונות מוכנים, אני אעזור לך לעצור, לחשוב יחד ולמצוא בעצמך את התשובות המדויקות לך. מה יושב לך על הלב ברגע זה?',
           timestamp: new Date(),
         },
       ]);
@@ -498,7 +512,8 @@ export default function App() {
           transcript: fullTranscript,
           conceptsApplied: conceptsFound, 
           timestamp: new Date().toISOString(),
-          sessionId: sessionId
+          sessionId: sessionId,
+          feedback: feedbackInput
         })
       });
       
@@ -602,7 +617,7 @@ export default function App() {
             key="signup-card"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="max-w-md w-full bg-[#e5e1d8] rounded-[32px] p-8 shadow-xl border border-[#d1cdc3] text-center"
+            className="max-w-md w-full bg-[#f5f2ed] rounded-[32px] p-8 shadow-xl border border-[#d1cdc3] text-center"
           >
             <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6">
               <Logo />
@@ -690,7 +705,7 @@ export default function App() {
           key="landing-card"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full bg-[#e5e1d8] rounded-[40px] p-10 shadow-2xl text-center border border-[#d1cdc3]"
+          className="max-w-md w-full bg-[#f5f2ed] rounded-[40px] p-10 shadow-2xl text-center border border-[#d1cdc3]"
         >
           <div className="w-32 h-24 flex items-center justify-center mx-auto mb-0 relative">
             <Logo />
@@ -740,9 +755,9 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col font-sans items-center" dir="rtl">
       {/* Main App Container - Boxed on desktop, full on mobile */}
-      <div className="flex-1 flex flex-col w-full max-w-5xl bg-[#e5e1d8] shadow-2xl md:my-8 md:rounded-[32px] overflow-hidden border-x border-[#d1cdc3] md:border-y relative">
+      <div className="flex-1 flex flex-col w-full max-w-5xl bg-[#f5f2ed] shadow-2xl md:my-8 md:rounded-[32px] overflow-hidden border-x border-[#d1cdc3] md:border-y relative">
         {/* Header */}
-        <header className="bg-white/80 backdrop-blur-md border-b border-orange-100 sticky top-0 z-50 px-6 py-4 flex items-center justify-between shadow-sm">
+        <header className="bg-[#fdfbf7]/80 backdrop-blur-md border-b border-orange-100 sticky top-0 z-50 px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
           <Logo />
           <div>
@@ -850,7 +865,7 @@ export default function App() {
                 "max-w-[85%] p-4 rounded-2xl shadow-sm relative group",
                 msg.role === 'user' 
                   ? "bg-orange-100 text-orange-900 rounded-tr-none border border-orange-200/50" 
-                  : "bg-white text-[#1a1a1a] rounded-tl-none border border-orange-100"
+                  : "bg-[#fdfbf7] text-[#1a1a1a] rounded-tl-none border border-orange-100"
               )}>
                 <div className="flex items-center gap-2 mb-1 opacity-50 text-[10px] uppercase tracking-wider font-mono">
                   {msg.role === 'user' ? <User className="w-3 h-3" /> : <div className="w-3 h-3"><Logo /></div>}
@@ -907,7 +922,7 @@ export default function App() {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="bg-white border-t border-[#e5e1da] overflow-hidden"
+            className="bg-[#fdfbf7] border-t border-[#e5e1da] overflow-hidden"
           >
             <div className="max-w-4xl mx-auto p-4">
               <div className="flex items-center gap-2 mb-3 text-[10px] text-[#5A5A40] uppercase tracking-widest font-mono font-bold">
@@ -936,7 +951,7 @@ export default function App() {
                     </button>
                     
                     {/* Desktop Tooltip for saved concept */}
-                    <div className="hidden md:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-white text-[#1a1a1a] text-xs rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible pointer-events-none z-50 border border-blue-200 leading-relaxed whitespace-normal">
+                    <div className="hidden md:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-[#fdfbf7] text-[#1a1a1a] text-xs rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible pointer-events-none z-50 border border-blue-200 leading-relaxed whitespace-normal">
                       <strong className="block mb-1 text-blue-900 font-bold">{concept.hebrew_term || concept.term}</strong>
                       <span className="text-blue-700 block">{concept.definition || concept.definition_he || concept.definition_en || 'אין הגדרה זמינה'}</span>
                       <span className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-white"></span>
@@ -950,7 +965,7 @@ export default function App() {
       </AnimatePresence>
       
       {/* Input Area */}
-      <footer className="p-4 md:p-6 bg-white border-t border-[#e5e1da]">
+      <footer className="p-4 md:p-6 bg-[#fdfbf7] border-t border-[#e5e1da]">
         <div className="max-w-4xl mx-auto">
           <form 
             onSubmit={handleSend}
@@ -991,7 +1006,7 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-2xl overflow-hidden flex flex-col relative"
+              className="bg-[#fdfbf7] w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-2xl overflow-hidden flex flex-col relative"
               onClick={(e) => e.stopPropagation()}
             >
               <header className="p-6 border-b border-blue-100 flex items-center justify-between bg-blue-50/30">
@@ -1174,6 +1189,29 @@ export default function App() {
                     className="w-full bg-blue-50 border-none rounded-2xl p-4 text-sm text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none h-24 resize-none leading-relaxed"
                   />
                 </section>
+
+                {/* Save Button */}
+                <div className="flex justify-center pt-4">
+                  <button
+                    onClick={handleSaveProfile}
+                    disabled={isSavingProfile}
+                    className={cn(
+                      "flex items-center gap-2 px-8 py-3 rounded-full font-bold text-sm transition-all shadow-lg",
+                      saveSuccess 
+                        ? "bg-green-500 text-white shadow-green-200" 
+                        : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 active:scale-95"
+                    )}
+                  >
+                    {isSavingProfile ? (
+                      <RefreshCcw className="w-4 h-4 animate-spin" />
+                    ) : saveSuccess ? (
+                      <CheckCircle2 className="w-4 h-4" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    {isSavingProfile ? "שומר..." : saveSuccess ? "נשמר בהצלחה!" : "שמירת כל השינויים"}
+                  </button>
+                </div>
               </div>
 
               <footer className="p-6 border-t border-blue-100 bg-blue-50/50 flex flex-col gap-4">
@@ -1214,7 +1252,7 @@ export default function App() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="bg-white w-full md:max-w-lg rounded-t-[32px] md:rounded-[32px] p-6 md:p-8 shadow-2xl relative"
+              className="bg-[#fdfbf7] w-full md:max-w-lg rounded-t-[32px] md:rounded-[32px] p-6 md:p-8 shadow-2xl relative"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Handle for mobile bottom sheet */}
@@ -1282,7 +1320,7 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden relative p-8 md:p-12 text-center"
+              className="bg-[#fdfbf7] w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden relative p-8 md:p-12 text-center"
             >
               <div className="w-24 h-24 flex items-center justify-center mx-auto mb-8">
                 <Logo />
@@ -1302,7 +1340,7 @@ export default function App() {
                 <div className="flex gap-4">
                   <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-900 font-serif">2</div>
                   <p className="text-blue-900 leading-relaxed">
-                    במהלך השיחה יופיעו מושגים בסוגריים מרובעים [ככה]. לחיצה עליהם תפתח הסבר שיעזור להעמיק בשפה של "זוגיות נקייה".
+                    במהלך השיחה יופיעו מושגים צבועים ומודגשים. לחיצה עליהם תפתח הסבר שיעזור להעמיק בשפה של "זוגיות נקייה".
                   </p>
                 </div>
 
