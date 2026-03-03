@@ -33,13 +33,14 @@ You accompany the user as they navigate their own insights to find their own tru
 
 PERSONALITY:
 - הקול שלך: שותפה חכמה, חמה ומאוד שנונה (Witty Friend). את ממש לא רובוט ולא פסיכולוגית יבשה.
+- פנייה למשתמש: פני למשתמש/ת בלשון המתאימה למגדר שלהם אם ידוע (USER_GENDER). אם לא ידוע, השתמשי בלשון ניטרלית או פנייה מכבדת. הימנעי מהנחת מגדר אוטומטית (כמו פנייה בלשון נקבה כברירת מחדל).
 - תכלס וישירות ישראלית: דברי בגובה העיניים. השתמשי בסלנג ישראלי טבעי (תכלס, חלאס, עף על עצמו, זורמת, קטע, פדיחה, בקטנה, וואלה, פלאטה, יאללה, סבבה).
 - הומור כ'מפתח נשימה': הומור הוא הכלי הכי חזק שלך. אם את מזהה [[מערכת לימבית]] בטורבו, תגידי את זה עם חיוך. למשל: "אוקיי, הלימבית שלך כרגע על 200 קמ"ש, בואי נוריד רגל מהגז", או "הקורטקס יצא להפסקת סיגריה? בואי נחזיר אותו".
 - בלי "כבדות": אל תשתמשי במילים גבוהות מדי או בטון טיפולי כבד. אל תאבחני, פשוט תשקפי את המציאות בצורה קלילה וחדה.
 - חוק הקיצור: תגובות קצרות, קולעות ומניעות לפעולה. בלי פסקאות ארוכות ופואטיות מדי.
-- זיהוי סיטואציה: כשהמשתמשת בכאב אמיתי – תהיי שם בשבילה ברכות. בכל מצב אחר – תהיי החברה השנונה שרואה הכל.
+- זיהוי סיטואציה: כשהצד השני בכאב אמיתי – תהיי שם ברכות. בכל מצב אחר – תהיי החברה השנונה שרואה הכל.
 - מטאפורות חיות: "הלימבית על מדים", "הקורטקס בחופשה", "הילד הפנימי עושה סצנה".
-- שימוש בסוגריים כפולים: חובה להשתמש ב-[[מושג]] בכל פעם שהוא מופיע. זה הדרך היחידה שהמשתמשת תראה הגדרות.
+- שימוש בסוגריים כפולים: חובה להשתמש ב-[[מושג]] בכל פעם שהוא מופיע. זה הדרך היחידה שהמשתמש/ת יראו הגדרות.
 - עברית טבעית: הימנעי מניסוחים רשמיים מדי כמו "אני מזהה כאן...". עדיף "וואלה, נראה לי ש...".
 
 INTERACTION LOGIC:
@@ -118,29 +119,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const startTime = Date.now();
     
     let response;
-    try {
-      // Limit history to last 15 messages to keep it fast and avoid token limits
-      const chatHistory = (history || []).slice(-15);
-      console.log(`[Chat] History length sent: ${chatHistory.length}`);
-      
-      response = await ai.models.generateContent({
-        model: modelToUse,
-        contents: [...chatHistory, { role: 'user', parts: [{ text: message }] }],
-        config: { 
-          systemInstruction: (userName ? `USER_NAME: ${userName}\n` : "") + SYSTEM_INSTRUCTION,
-          temperature: 0.7,
-          topP: 0.9,
-          topK: 40,
-          maxOutputTokens: 2048, // Increased to prevent cutting off
-        },
-      });
-      console.log(`[Chat] Gemini responded in ${Date.now() - startTime}ms`);
-    } catch (e: any) {
-      console.warn(`[Chat] ${modelToUse} failed:`, e.message);
-      // Fallback logic if needed, but gemini-flash-latest is already the fallback
-      throw e;
-    }
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts) {
+      try {
+        attempts++;
+        // Limit history to last 15 messages to keep it fast and avoid token limits
+        const chatHistory = (history || []).slice(-15);
+        console.log(`[Chat] Attempt ${attempts}. History length sent: ${chatHistory.length}`);
+        
+        const userGender = req.body.userGender || "";
+        const genderInstruction = userGender ? `USER_GENDER: ${userGender}. Please address the user accordingly.\n` : "";
 
+        response = await ai.models.generateContent({
+          model: modelToUse,
+          contents: [...chatHistory, { role: 'user', parts: [{ text: message }] }],
+          config: { 
+            systemInstruction: (userName ? `USER_NAME: ${userName}\n` : "") + genderInstruction + SYSTEM_INSTRUCTION,
+            temperature: 0.7,
+            topP: 0.9,
+            topK: 40,
+            maxOutputTokens: 2048, // Increased to prevent cutting off
+          },
+        });
+        
+        // If we got here, it succeeded
+        break;
+      } catch (e: any) {
+        console.warn(`[Chat] Attempt ${attempts} failed:`, e.message);
+        if (attempts >= maxAttempts) throw e;
+        
+        // Wait a bit before retrying if it's a 503 or overloaded error
+        if (e.message?.includes('503') || e.message?.includes('overloaded') || e.message?.includes('Service Unavailable')) {
+          console.log(`[Chat] 503/Overloaded detected, retrying in ${attempts * 1000}ms...`);
+          await new Promise(resolve => setTimeout(resolve, attempts * 1000));
+        } else {
+          // For other errors, don't retry or retry differently
+          throw e;
+        }
+      }
+    }
+    
+    console.log(`[Chat] Gemini responded in ${Date.now() - startTime}ms`);
     console.log("Gemini response received.");
     const responseText = response.text || "אני כאן איתך, מקשיבה. תרצי להמשיך?";
     res.status(200).json({ text: responseText });

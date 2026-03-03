@@ -57,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           console.log(`Feedback saved successfully to ${tableName}. Record ID: ${record[0].id}`);
           return res.json({ id: record[0].id, success: true, table: tableName });
         } catch (e: any) {
-          console.warn(`Initial save failed for ${tableName}: ${e.message}`, e);
+          console.warn(`Initial save failed for ${tableName}: ${e.message}`, JSON.stringify(e));
           
           // Fallback: Try with common alternative column names if the first one failed
           console.log(`Retrying ${tableName} with alternative column names...`);

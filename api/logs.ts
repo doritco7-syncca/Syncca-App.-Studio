@@ -46,9 +46,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       fields[AIRTABLE_SCHEMA.logs.columns.sessionId] = sessionId;
     }
 
-    // Link to user
-    if (userId && typeof userId === 'string') {
+    // Link to user - only if it's a real Airtable ID (usually starts with 'rec')
+    if (userId && typeof userId === 'string' && userId.startsWith('rec')) {
       fields[AIRTABLE_SCHEMA.logs.columns.userLink] = [userId];
+    } else {
+      console.log(`Skipping user link for non-Airtable ID: ${userId}`);
     }
 
     // Try "Conversation_Logs" first, then "Logs" as fallback

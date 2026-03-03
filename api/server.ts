@@ -47,13 +47,14 @@ You accompany the user as they navigate their own insights to find their own tru
 
 PERSONALITY:
 - הקול שלך: שותפה חכמה, חמה ומאוד שנונה (Witty Friend). את ממש לא רובוט ולא פסיכולוגית יבשה.
+- פנייה למשתמש: פני למשתמש/ת בלשון המתאימה למגדר שלהם אם ידוע (USER_GENDER). אם לא ידוע, השתמשי בלשון ניטרלית או פנייה מכבדת. הימנעי מהנחת מגדר אוטומטית (כמו פנייה בלשון נקבה כברירת מחדל).
 - תכלס וישירות ישראלית: דברי בגובה העיניים. השתמשי בסלנג ישראלי טבעי (תכלס, חלאס, עף על עצמו, זורמת, קטע, פדיחה, בקטנה, וואלה, פלאטה, יאללה, סבבה).
 - הומור כ'מפתח נשימה': הומור הוא הכלי הכי חזק שלך. אם את מזהה [[מערכת לימבית]] בטורבו, תגידי את זה עם חיוך. למשל: "אוקיי, הלימבית שלך כרגע על 200 קמ"ש, בואי נוריד רגל מהגז", או "הקורטקס יצא להפסקת סיגריה? בואי נחזיר אותו".
 - בלי "כבדות": אל תשתמשי במילים גבוהות מדי או בטון טיפולי כבד. אל תאבחני, פשוט תשקפי את המציאות בצורה קלילה וחדה.
 - חוק הקיצור: תגובות קצרות, קולעות ומניעות לפעולה. בלי פסקאות ארוכות ופואטיות מדי.
-- זיהוי סיטואציה: כשהמשתמשת בכאב אמיתי – תהיי שם בשבילה ברכות. בכל מצב אחר – תהיי החברה השנונה שרואה הכל.
+- זיהוי סיטואציה: כשהצד השני בכאב אמיתי – תהיי שם ברכות. בכל מצב אחר – תהיי החברה השנונה שרואה הכל.
 - מטאפורות חיות: "הלימבית על מדים", "הקורטקס בחופשה", "הילד הפנימי עושה סצנה".
-- שימוש בסוגריים כפולים: חובה להשתמש ב-[[מושג]] בכל פעם שהוא מופיע. זה הדרך היחידה שהמשתמשת תראה הגדרות.
+- שימוש בסוגריים כפולים: חובה להשתמש ב-[[מושג]] בכל פעם שהוא מופיע. זה הדרך היחידה שהמשתמש/ת יראו הגדרות.
 - עברית טבעית: הימנעי מניסוחים רשמיים מדי. השתמשי ב"וואלה" רק פעם אחת בשיחה, לא בתחילת כל משפט. גווני עם מילות קישור אחרות כמו "תשמע/י", "קטע", "מעניין", "אני מבינה".
 
 INTERACTION LOGIC:
@@ -444,6 +445,47 @@ app.post("/api/logs", async (req, res) => {
     });
   }
 });
+app.post("/api/feedbacks", async (req, res) => {
+  try {
+    const base = getBase();
+    if (!base) throw new Error("Airtable not configured");
+    
+    const { email, content } = req.body;
+    const tableName = "Feedbacks";
+    const tableNames = [tableName, "Feedback", "Feedbacks"];
+    const uniqueTableNames = [...new Set(tableNames)];
+    
+    let lastError = null;
+    for (const tName of uniqueTableNames) {
+      try {
+        console.log(`Attempting to save feedback to table: ${tName}`);
+        const fields: any = {
+          "Feedback_Content": content,
+          "User_Email": email || ""
+        };
+        
+        try {
+          const record = await base(tName).create([{ fields }]);
+          return res.json({ id: record[0].id, success: true, table: tName });
+        } catch (e: any) {
+          console.warn(`Initial save failed for ${tName}: ${e.message}`);
+          // Fallback to simpler field names
+          const altFields: any = { "Content": content };
+          if (email) altFields["Email"] = email;
+          const record = await base(tName).create([{ fields: altFields }]);
+          return res.json({ id: record[0].id, success: true, table: tName, alt: true });
+        }
+      } catch (e: any) {
+        lastError = e;
+      }
+    }
+    throw lastError || new Error("Failed to save feedback");
+  } catch (error: any) {
+    console.error("Feedback error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get("/api/test-airtable", async (req, res) => {
   try {
     const base = getBase();
@@ -490,155 +532,88 @@ app.get("/api/test-airtable", async (req, res) => {
 
 app.post("/api/chat", async (req, res) => {
   console.log("--- CHAT REQUEST START ---");
-  const timeoutPromise = new Promise((_, reject) => 
-    setTimeout(() => reject(new Error("Request timed out after 45 seconds")), 45000)
-  );
-
+  
   try {
-      const chatPromise = (async () => {
-        const { message, history, userName, savedConcepts } = req.body;
-        console.log(`User: ${userName || 'anonymous'}, Message: ${message?.substring(0, 50)}...`);
-        
-        // Try all possible environment variable names for the Gemini key
-        const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || process.env.VITE_GEMINI_API_KEY;
+    const { message, history, userName, userGender, savedConcepts } = req.body;
+    console.log(`User: ${userName || 'anonymous'}, Gender: ${userGender || 'unknown'}, Message: ${message?.substring(0, 50)}...`);
+    
+    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || process.env.VITE_GEMINI_API_KEY;
+    if (!apiKey || apiKey === "undefined" || apiKey.length < 10) {
+      throw new Error("AI configuration missing on server.");
+    }
 
-        if (!apiKey || apiKey === "undefined" || apiKey.length < 10) {
-          console.error("Gemini API key is missing or invalid format");
-          throw new Error("AI configuration missing on server. Please ensure GEMINI_API_KEY is set correctly in Vercel settings.");
+    const ai = new GoogleGenAI({ apiKey });
+    
+    // Fetch lexicon for context (with cache)
+    const base = getBase();
+    let lexicon = [];
+    if (base) {
+      const now = Date.now();
+      if (lexiconCache.length > 0 && (now - lastLexiconFetch < LEXICON_CACHE_TTL)) {
+        lexicon = lexiconCache;
+      } else {
+        try {
+          const records = await base(AIRTABLE_SCHEMA.lexicon.tableName).select({ maxRecords: 100 }).all();
+          lexicon = records.map(record => ({
+            hebrew_term: record.get(AIRTABLE_SCHEMA.lexicon.columns.hebrew_term),
+            term: record.get(AIRTABLE_SCHEMA.lexicon.columns.term),
+            definition_he: record.get(AIRTABLE_SCHEMA.lexicon.columns.definition_he)
+          }));
+          lexiconCache = lexicon;
+          lastLexiconFetch = now;
+        } catch (e: any) {
+          lexicon = lexiconCache;
         }
+      }
+    }
 
-        console.log("Initializing GoogleGenAI...");
-        const ai = new GoogleGenAI({ apiKey });
-        
-        // Fetch lexicon for context (with cache)
-        const base = getBase();
-        let lexicon = [];
-        if (base) {
-          const now = Date.now();
-          if (lexiconCache.length > 0 && (now - lastLexiconFetch < LEXICON_CACHE_TTL)) {
-            lexicon = lexiconCache;
-          } else {
-            try {
-              console.log("Fetching lexicon from Airtable for chat context...");
-              const records = await base(AIRTABLE_SCHEMA.lexicon.tableName).select({
-                maxRecords: 100 
-              }).all();
-              lexicon = records.map(record => ({
-                hebrew_term: record.get(AIRTABLE_SCHEMA.lexicon.columns.hebrew_term),
-                term: record.get(AIRTABLE_SCHEMA.lexicon.columns.term),
-                definition_he: record.get(AIRTABLE_SCHEMA.lexicon.columns.definition_he)
-              }));
-              lexiconCache = lexicon;
-              lastLexiconFetch = now;
-              console.log(`Fetched ${lexicon.length} terms.`);
-            } catch (e: any) {
-              console.warn(`Lexicon fetch failed: ${e.message}. Using cache if available.`);
-              lexicon = lexiconCache;
-            }
-          }
-        }
+    const nameContext = userName ? `\nUSER_NAME: ${userName}\n` : "";
+    const genderContext = userGender ? `\nUSER_GENDER: ${userGender}. Please address the user accordingly.\n` : "";
+    const lexiconContext = lexicon.length > 0
+      ? `\nAVAILABLE CONCEPTS (Wrap these in [[ ]] when used):\n${lexicon.map(l => l.hebrew_term).join(', ')}\n`
+      : "";
 
-        const nameContext = userName ? `\nUSER_NAME: ${userName}\n` : "";
-        const lexiconContext = lexicon.length > 0
-          ? `\nAVAILABLE CONCEPTS (Wrap these in [[ ]] when used):\n${lexicon.map(l => l.hebrew_term).join(', ')}\n`
-          : "";
-
-        // Use gemini-flash-latest for maximum stability
-        const modelName = "gemini-flash-latest";
-        console.log(`Starting chat with model: ${modelName}`);
-        
-        const updateUserNameTool = {
-          functionDeclarations: [
-            {
-              name: "updateUserName",
-              description: "Update the user's first name in the system when they introduce themselves.",
-              parameters: {
-                type: "OBJECT",
-                properties: {
-                  firstName: {
-                    type: "STRING",
-                    description: "The user's first name."
-                  }
-                },
-                required: ["firstName"]
-              }
-            }
-          ]
-        };
-
+    const modelName = "gemini-3-flash-preview";
+    console.log(`Starting chat with model: ${modelName}`);
+    
+    let response;
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts) {
+      try {
+        attempts++;
         const chat = ai.chats.create({
           model: modelName,
           config: {
-            systemInstruction: nameContext + lexiconContext + AIRTABLE_SCHEMA.systemInstruction,
-            // Temporarily disabled tool as requested by user to debug response issues
-            // tools: [updateUserNameTool],
-            safetySettings: [
-              { category: "HARM_CATEGORY_HATE_SPEECH" as any, threshold: "BLOCK_NONE" as any },
-              { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT" as any, threshold: "BLOCK_NONE" as any },
-              { category: "HARM_CATEGORY_HARASSMENT" as any, threshold: "BLOCK_NONE" as any },
-              { category: "HARM_CATEGORY_DANGEROUS_CONTENT" as any, threshold: "BLOCK_NONE" as any }
-            ],
+            systemInstruction: nameContext + genderContext + lexiconContext + AIRTABLE_SCHEMA.systemInstruction,
             temperature: 0.7,
             topP: 0.95,
-            topK: 40
+            topK: 40,
+            maxOutputTokens: 2048
           },
-          history: history || []
+          history: (history || []).slice(-15)
         });
 
-        console.log("Sending message to Gemini...");
-        let response;
-        try {
-          response = await chat.sendMessage({ message });
-        } catch (geminiError: any) {
-          console.error("Gemini API error during sendMessage:", geminiError);
-          throw new Error(`Gemini API error: ${geminiError.message}`);
+        response = await chat.sendMessage({ message });
+        break;
+      } catch (geminiError: any) {
+        console.warn(`Gemini Attempt ${attempts} failed:`, geminiError.message);
+        if (attempts >= maxAttempts) throw geminiError;
+        if (geminiError.message?.includes('503') || geminiError.message?.includes('overloaded')) {
+          await new Promise(resolve => setTimeout(resolve, attempts * 1000));
+        } else {
+          throw geminiError;
         }
-        console.log("Gemini response received.");
-        
-        // Handle function calls (if any were returned despite being disabled)
-        const functionCalls = response.functionCalls;
-        if (functionCalls && functionCalls.length > 0) {
-          console.log("AI requested function call:", functionCalls[0].name);
-          if (functionCalls[0].name === "updateUserName") {
-            const { firstName } = functionCalls[0].args as any;
-            console.log("Updating user name to:", firstName);
-            return { 
-              text: response.text || `נעים להכיר, ${firstName}! אני כאן איתך.`, 
-              toolCall: { name: "updateUserName", args: { firstName } } 
-            };
-          }
-        }
-        
-        // Get text response safely
-        let responseText = "";
-        try {
-          responseText = response.text || "";
-        } catch (e) {
-          console.warn("Error calling response.text getter:", e);
-        }
+      }
+    }
 
-        // Final fallback if text is still empty
-        if (!responseText || responseText.trim() === "") {
-          console.log("AI returned empty text, using fallback.");
-          responseText = "אני כאן איתך, מקשיבה. תרצי להמשיך?";
-        }
-
-        const finalResult = { text: responseText };
-        console.log("Sending final result to client:", JSON.stringify(finalResult).substring(0, 100) + "...");
-        return finalResult;
-      })();
-
-    const result = await Promise.race([chatPromise, timeoutPromise]) as any;
+    let responseText = response.text || "אני כאן איתך, מקשיבה. תרצי להמשיך?";
+    res.json({ text: responseText });
     console.log("--- CHAT REQUEST SUCCESS ---");
-    res.json(result);
   } catch (error: any) {
-    console.error("--- CHAT REQUEST FAILED ---");
-    console.error("Error Detail:", error);
-    res.status(500).json({ 
-      error: error.message || "An unknown error occurred on the AI server",
-      details: error.name,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    console.error("--- CHAT REQUEST FAILED ---", error);
+    res.status(500).json({ error: error.message });
   }
 });
 

@@ -432,12 +432,14 @@ export default function App() {
       const learnedIds = userData.fields?.[AIRTABLE_SCHEMA.users.columns.learnedConcepts] || [];
       const userSavedConcepts = lexicon.filter(l => learnedIds.includes(l.id));
 
+      const userGender = userData.fields?.[AIRTABLE_SCHEMA.users.columns.gender] || '';
+
       const service = new MidwifeService();
       service.onNameUpdate = (name: string) => {
         updateUserField('firstName', name);
         setCurrentUser(prev => prev ? { ...prev, name } : null);
       };
-      await service.init(userSavedConcepts, firstName !== 'משתמש' ? firstName : undefined);
+      await service.init(userSavedConcepts, firstName !== 'משתמש' ? firstName : undefined, userGender);
       midwifeRef.current = service;
       
       setSessionStartTime(new Date());
@@ -606,7 +608,7 @@ export default function App() {
             
             <h2 className="text-2xl font-serif text-[#1e3a8a] mb-2">ברוכים הבאים ל-Syncca</h2>
             <p className="text-[#5A5A40] text-sm mb-8 leading-relaxed">
-              כדי להבטיח בקרת איכות ולשמור על התובנות שלך – נבקש ממך להזדהות.
+              כדי להבטיח בקרת איכות ולשמור על התובנות – נבקש להזדהות.
             </p>
             
             <form onSubmit={completeSignUp} className="space-y-6">
@@ -684,7 +686,7 @@ export default function App() {
           </p>
           
           <p className="text-[#4a5568] mb-10 leading-relaxed text-sm px-4">
-            אנחנו כאן כדי לעזור לך להחליף את מאבקי הכוח שמכבים יום אחר יום את האהבה, בשפה של תקשורת ישירה ובוגרת, שרואה גם את עצמך וגם את האחר.
+            אנחנו כאן כדי לעזור להחליף את מאבקי הכוח שמכבים יום אחר יום את האהבה, בשפה של תקשורת ישירה ובוגרת, שרואה גם את העצמי וגם את האחר.
           </p>
           
           <div className="flex flex-col items-center justify-center mb-10">
@@ -732,7 +734,7 @@ export default function App() {
             </h2>
             <div className="flex items-center gap-1 text-[10px] text-orange-500 font-mono uppercase tracking-widest">
               <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse"></span>
-              {currentUser?.name && currentUser.name !== 'משתמש' ? `מלווה את ${currentUser.name}` : 'מסונכרנת'}
+              {currentUser?.name && currentUser.name !== 'משתמש' ? `בליווי של ${currentUser.name}` : 'בסינכרון'}
             </div>
           </div>
         </div>
@@ -870,8 +872,8 @@ export default function App() {
               </div>
               <span className="text-[10px] text-blue-900 font-mono animate-pulse">
                 {messages.filter(m => m.role === 'assistant').length <= 1 
-                  ? "רגע, מתארגנת על עצמי..." 
-                  : "קלטתי ותיכף אענה לך"}
+                  ? "רגע, מתארגנים..." 
+                  : "קלטתי, כבר עונה"}
               </span>
             </div>
           </motion.div>
@@ -891,7 +893,7 @@ export default function App() {
             <div className="max-w-4xl mx-auto p-4">
               <div className="flex items-center gap-2 mb-3 text-[10px] text-[#5A5A40] uppercase tracking-widest font-mono font-bold">
                 <Bookmark className="w-3 h-3" />
-                מושגים ששמרת
+                מושגים שנשמרו
               </div>
               <div className="flex flex-wrap gap-2">
                 {savedConcepts.map((concept) => (
@@ -1013,7 +1015,7 @@ export default function App() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-blue-400 text-sm italic">טרם שמרת מושגים בשיחה זו.</p>
+                    <p className="text-blue-400 text-sm italic">טרם נשמרו מושגים בשיחה זו.</p>
                   )}
                 </section>
 
@@ -1063,7 +1065,7 @@ export default function App() {
                       value={userMaritalStatus}
                       onChange={(e) => setUserMaritalStatus(e.target.value)}
                       onBlur={() => updateUserField('maritalStatus', userMaritalStatus)}
-                      placeholder="למשל: נשוי/אה, בזוגיות..."
+                      placeholder="למשל: נשואים, בזוגיות..."
                       className="w-full bg-blue-50 border-none rounded-2xl p-4 text-sm text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none"
                     />
                   </div>
@@ -1120,7 +1122,7 @@ export default function App() {
                       value={userIntention}
                       onChange={(e) => setUserIntention(e.target.value)}
                       onBlur={() => updateUserField('intention', userIntention)}
-                      placeholder="מה המטרה שחשובה לך לעבוד עליה?"
+                      placeholder="מה המטרה שחשוב לעבוד עליה?"
                       className="w-full bg-blue-50 border-none rounded-2xl p-4 text-sm text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none h-32 resize-none leading-relaxed"
                     />
                   </div>
@@ -1133,7 +1135,7 @@ export default function App() {
                       value={userInsights}
                       onChange={(e) => setUserInsights(e.target.value)}
                       onBlur={() => updateUserField('insights', userInsights)}
-                      placeholder="מה גילית על עצמך היום?"
+                      placeholder="מה התגלה היום?"
                       className="w-full bg-blue-50 border-none rounded-2xl p-4 text-sm text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none h-32 resize-none leading-relaxed"
                     />
                   </div>
@@ -1149,7 +1151,7 @@ export default function App() {
                     value={userFeedback}
                     onChange={(e) => setUserFeedback(e.target.value)}
                     onBlur={() => updateUserField('feedback', userFeedback)}
-                    placeholder="נשמח לשמוע הצעות לשיפור או פידבק על החוויה שלך..."
+                    placeholder="נשמח לשמוע הצעות לשיפור או פידבק על החוויה בשימוש..."
                     className="w-full bg-blue-50 border-none rounded-2xl p-4 text-sm text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none h-24 resize-none leading-relaxed"
                   />
                 </section>
@@ -1281,7 +1283,7 @@ export default function App() {
                 <div className="flex gap-4">
                   <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-900 font-serif">2</div>
                   <p className="text-blue-900 leading-relaxed">
-                    במהלך השיחה יופיעו מושגים בסוגריים מרובעים [ככה]. לחיצה עליהם תפתח הסבר שיעזור לך להעמיק בשפה של "זוגיות נקייה".
+                    במהלך השיחה יופיעו מושגים בסוגריים מרובעים [ככה]. לחיצה עליהם תפתח הסבר שיעזור להעמיק בשפה של "זוגיות נקייה".
                   </p>
                 </div>
 
@@ -1302,7 +1304,7 @@ export default function App() {
                 <div className="flex gap-4">
                   <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-900 font-serif">5</div>
                   <p className="text-blue-900 leading-relaxed">
-                    הפידבק שלך עוזר לנו לצמוח. בסיום השיחה, נשמח לשמוע מה היית מציע/ה להוסיף, להוריד או לשנות ב-Syncca.
+                    הפידבק עוזר לנו לצמוח. בסיום השיחה, נשמח לשמוע מה כדאי להוסיף, להוריד או לשנות ב-Syncca.
                   </p>
                 </div>
               </div>
@@ -1344,12 +1346,12 @@ export default function App() {
             
             <div className="bg-blue-50 rounded-3xl p-6 mb-8 text-right border border-blue-100">
               <label className="block text-sm font-serif mb-3 text-blue-900">
-                לפני שנפרדים, מה היית מציע/ה להוסיף, להוריד או לשנות ב-Syncca?
+                לפני שנפרדים, מה כדאי להוסיף, להוריד או לשנות ב-Syncca?
               </label>
               <textarea
                 value={feedbackInput}
                 onChange={(e) => setFeedbackInput(e.target.value)}
-                placeholder="הפידבק שלך עוזר לנו לצמוח..."
+                placeholder="הפידבק עוזר לנו לצמוח..."
                 className="w-full bg-white border border-blue-200 rounded-2xl p-4 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all min-h-[120px] resize-none"
               />
             </div>
@@ -1366,7 +1368,7 @@ export default function App() {
                 onClick={() => window.location.reload()}
                 className="w-full text-blue-400 py-2 text-sm hover:text-blue-600 transition-colors"
               >
-                דלג/י והתחל שיחה חדשה
+                דילוג והתחלת שיחה חדשה
               </button>
             </div>
           </motion.div>

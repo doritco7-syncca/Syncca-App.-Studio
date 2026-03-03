@@ -4,15 +4,17 @@ export class MidwifeService {
   private history: any[] = [];
   private lexicon: any[] = [];
   private userName?: string;
+  private userGender?: string;
   private savedConcepts: any[] = [];
   public onNameUpdate?: (name: string) => void;
 
   constructor() {
   }
 
-  async init(savedConcepts: any[] = [], userName?: string) {
+  async init(savedConcepts: any[] = [], userName?: string, userGender?: string) {
     this.userName = userName;
     this.savedConcepts = savedConcepts;
+    this.userGender = userGender;
     
     try {
       // Try to load lexicon for context
@@ -40,6 +42,7 @@ export class MidwifeService {
           message,
           history: this.history,
           userName: this.userName,
+          userGender: this.userGender,
           savedConcepts: this.savedConcepts
         }),
         signal: controller.signal
@@ -81,10 +84,10 @@ export class MidwifeService {
     } catch (e: any) {
       clearTimeout(timeoutId);
       if (e.name === 'AbortError') {
-        return "החיבור לוקח יותר זמן מהרגיל. בואי ננסה שוב בעוד רגע.";
+        return "החיבור לוקח יותר זמן מהרגיל. בואו ננסה שוב בעוד רגע.";
       }
       console.error("AI interaction failed", e);
-      return `סליחה, משהו השתבש בחיבור (${e.message}). בואי ננסה שוב.`;
+      return `סליחה, משהו השתבש בחיבור (${e.message}). בואו ננסה שוב.`;
     }
   }
 }
