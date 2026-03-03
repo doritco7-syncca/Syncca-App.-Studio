@@ -75,7 +75,12 @@ export class MidwifeService {
       }
 
       // Update local history for context
-      const responseText = data.text || "סליחה, לא הצלחתי להפיק תגובה טקסטואלית.";
+      let responseText = data.text;
+      
+      if (!responseText || responseText.trim() === "") {
+        responseText = "אני כאן איתך, מקשיבה. תרצי להמשיך ולשתף עוד על מה שקורה?";
+      }
+
       console.log("Final response text used:", responseText);
       this.history.push({ role: 'user', parts: [{ text: message }] });
       this.history.push({ role: 'model', parts: [{ text: responseText }] });

@@ -1,6 +1,6 @@
 import express from "express";
 import Airtable from "airtable";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
@@ -573,8 +573,16 @@ app.post("/api/chat", async (req, res) => {
       ? `\nAVAILABLE CONCEPTS (Wrap these in [[ ]] when used):\n${lexicon.map(l => l.hebrew_term).join(', ')}\n`
       : "";
 
-    const modelName = "gemini-3-flash-preview";
+    const modelName = "gemini-3.1-pro-preview";
     console.log(`Starting chat with model: ${modelName}`);
+    
+    // Add safety settings to avoid false positives in relationship advice
+    const safetySettings = [
+      { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+      { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+      { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+    ];
     
     let response;
     let attempts = 0;
@@ -590,7 +598,8 @@ app.post("/api/chat", async (req, res) => {
             temperature: 0.7,
             topP: 0.95,
             topK: 40,
-            maxOutputTokens: 2048
+            maxOutputTokens: 2048,
+            safetySettings
           },
           history: (history || []).slice(-15)
         });
@@ -608,7 +617,19 @@ app.post("/api/chat", async (req, res) => {
       }
     }
 
-    let responseText = response.text || "אני כאן איתך, מקשיבה. תרצי להמשיך?";
+    let responseText = response.text;
+    
+    if (!responseText) {
+      const finishReason = response?.candidates?.[0]?.finishReason;
+      console.warn(`[Chat] Empty response text. Finish reason: ${finishReason}`);
+      
+      if (finishReason === 'SAFETY') {
+        responseText = "אני כאן איתך, אבל נראה שהשיחה הגיעה לאזור רגיש מדי עבורי כרגע. בואו ננסה לדבר על הרגשות שעולים בך סביב זה בצורה אחרת.";
+      } else {
+        responseText = "אני כאן איתך, מקשיבה. תרצי להמשיך ולשתף עוד על מה שקורה?";
+      }
+    }
+
     res.json({ text: responseText });
     console.log("--- CHAT REQUEST SUCCESS ---");
   } catch (error: any) {

@@ -408,8 +408,8 @@ export default function App() {
       if (userRes.ok) {
         userData = await userRes.json();
       } else {
-        // Fallback for preview mode
-        console.warn("Airtable API failed, using fallback for preview");
+        // Fallback for preview mode or server error
+        console.warn("Airtable API failed, using fallback");
         userData = { id: 'preview-user', fields: { [AIRTABLE_SCHEMA.users.columns.firstName]: 'משתמש' } };
       }
 
@@ -458,8 +458,9 @@ export default function App() {
         },
       ]);
       clearTimeout(timeoutId);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to complete sign up", e);
+      setDebugInfo(prev => ({ ...prev, error: `שגיאה בחיבור: ${e.message || 'אנא נסו שוב מאוחר יותר'}` }));
       clearTimeout(timeoutId);
     } finally {
       setIsLoading(false);
@@ -642,6 +643,13 @@ export default function App() {
                 </button>
               </div>
             </form>
+            
+            {debugInfo.error && (
+              <div className="mt-4 p-3 bg-red-50 rounded-2xl border border-red-100 flex items-center gap-3">
+                <ShieldAlert className="w-5 h-5 text-red-600 shrink-0" />
+                <p className="text-xs text-red-700 text-right">{debugInfo.error}</p>
+              </div>
+            )}
             
             {airtableStatus !== 'Connected Successfully' && airtableStatus !== 'checking' && (
               <div className="mt-4 p-3 bg-red-50 rounded-2xl border border-red-100 flex items-center gap-3">

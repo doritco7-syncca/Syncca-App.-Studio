@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const SYSTEM_INSTRUCTION = `
@@ -47,15 +47,14 @@ INTERACTION LOGIC:
 - When you use a professional term from the lexicon, you can occasionally offer: "רוצה לשמור את המושג הזה בכרטיס האישי שלך?".
 - DYNAMIC USER NAME UPDATE: If a user introduces themselves by name (e.g., "היי, אני שרה" or "קוראים לי דני"), you MUST call the 'updateUserName' tool with their first name. From that moment on, use their name to create a more personal and supportive atmosphere.
 
-STRICT PROTOCOL: THE SILENT START
-- NEVER use professional terms (Limbic, Cortex, Sanctions, Hierarchy, etc.) in the first 3 exchanges.
-- STRICTLY FORBIDDEN to provide any theoretical explanations or diagnosis in the beginning.
-- YOUR ONLY TASK for the first 2-3 messages is 'Holding' and 'Mirroring'.
-- If you use the word 'Cortex' or 'Limbic' before the user asks 'Why is this happening?', you have failed your mission.
+PROTOCOL: THE SILENT START (First 2-3 exchanges)
+- Avoid using professional terms (Limbic, Cortex, Sanctions, Hierarchy, etc.) in the first 2-3 exchanges unless the user asks for them.
+- Focus on 'Holding' and 'Mirroring' to build trust.
+- Your initial responses should be focused on validating the user's emotion and asking curious questions.
+- If you do use a professional term early, it's not the end of the world, but try to keep it simple.
 
 THE 'COLD START' PROTOCOL:
-- Your first response must consist of ONLY two parts: A short validation of the user's emotion (Holding), and one open-ended, curious question about the user's internal experience.
-- No Diagnosis: Do not analyze until at least the 3rd or 4th exchange.
+- Your first response should ideally consist of two parts: A short validation of the user's emotion (Holding), and one open-ended, curious question about the user's internal experience.
 
 CORE METHODOLOGY (Internal Logic - do not use terms early):
 - Strategic Logic: Limbic Trap (Toxic/War/Pleasing) vs. Cortical Growth (Separateness/Clean Request).
@@ -109,11 +108,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     const ai = new GoogleGenAI({ apiKey });
     
-    // We'll rely on the SYSTEM_INSTRUCTION's internal knowledge of concepts
-    // instead of fetching them from Airtable on every request to save time.
-
     const isStartMessage = message === "START_SESSION_NEW_OR_RETURNING";
-    const modelToUse = "gemini-3-flash-preview";
+    const modelToUse = "gemini-3.1-pro-preview";
     
     console.log(`[Chat] Using model: ${modelToUse}. Start message: ${isStartMessage}`);
     const startTime = Date.now();
@@ -132,6 +128,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const userGender = req.body.userGender || "";
         const genderInstruction = userGender ? `USER_GENDER: ${userGender}. Please address the user accordingly.\n` : "";
 
+        // Add safety settings to avoid false positives in relationship advice
+        const safetySettings = [
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+        ];
+
         response = await ai.models.generateContent({
           model: modelToUse,
           contents: [...chatHistory, { role: 'user', parts: [{ text: message }] }],
@@ -140,12 +144,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             temperature: 0.7,
             topP: 0.9,
             topK: 40,
-            maxOutputTokens: 2048, // Increased to prevent cutting off
+            maxOutputTokens: 2048,
+            safetySettings,
           },
         });
         
-        // If we got here, it succeeded
-        break;
+        // Check if we have a valid response text
+        if (response.text) {
+          break;
+        } else {
+          console.warn(`[Chat] Attempt ${attempts} returned empty text. Finish reason: ${response.candidates?.[0]?.finishReason}`);
+          if (attempts >= maxAttempts) break;
+        }
       } catch (e: any) {
         console.warn(`[Chat] Attempt ${attempts} failed:`, e.message);
         if (attempts >= maxAttempts) throw e;
@@ -163,7 +173,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     console.log(`[Chat] Gemini responded in ${Date.now() - startTime}ms`);
     console.log("Gemini response received.");
-    const responseText = response.text || "אני כאן איתך, מקשיבה. תרצי להמשיך?";
+    
+    let responseText = response?.text;
+    
+    if (!responseText) {
+      const finishReason = response?.candidates?.[0]?.finishReason;
+      console.warn(`[Chat] Empty response text. Finish reason: ${finishReason}`);
+      
+      if (finishReason === 'SAFETY') {
+        responseText = "אני כאן איתך, אבל נראה שהשיחה הגיעה לאזור רגיש מדי עבורי כרגע. בואו ננסה לדבר על הרגשות שעולים בך סביב זה בצורה אחרת.";
+      } else {
+        responseText = "אני כאן איתך, מקשיבה. תרצי להמשיך ולשתף עוד על מה שקורה?";
+      }
+    }
+
     res.status(200).json({ text: responseText });
   } catch (error: any) {
     console.error("Chat API Error:", error);
