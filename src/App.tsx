@@ -599,6 +599,7 @@ export default function App() {
       return (
         <div className="min-h-screen flex items-center justify-center p-4 font-sans" dir="rtl">
           <motion.div 
+            key="signup-card"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="max-w-md w-full bg-[#e5e1d8] rounded-[32px] p-8 shadow-xl border border-[#d1cdc3] text-center"
@@ -644,10 +645,10 @@ export default function App() {
               </div>
             </form>
             
-            {debugInfo.error && (
+            {debugInfo?.error && (
               <div className="mt-4 p-3 bg-red-50 rounded-2xl border border-red-100 flex items-center gap-3">
                 <ShieldAlert className="w-5 h-5 text-red-600 shrink-0" />
-                <p className="text-xs text-red-700 text-right">{debugInfo.error}</p>
+                <p className="text-xs text-red-700 text-right">{String(debugInfo.error)}</p>
               </div>
             )}
             
@@ -664,13 +665,20 @@ export default function App() {
             <p className="mt-6 text-[10px] text-orange-400 uppercase tracking-[0.2em] font-mono">
               Secure & Private Connection
             </p>
-            {lexicon.length === 0 && airtableStatus === 'Connected Successfully' && (
+            {lexicon?.length === 0 && airtableStatus === 'Connected Successfully' && (
               <div className="mt-4 p-2 bg-amber-50 rounded-lg border border-amber-100">
                 <p className="text-[9px] text-amber-600 font-mono">
                   Lexicon is empty. Check Relationship_Lexicon table.
                 </p>
               </div>
             )}
+
+            <button 
+              onClick={() => setShowSignUp(false)}
+              className="mt-8 text-[#5A5A40] text-xs hover:underline"
+            >
+              חזרה למסך הבית
+            </button>
           </motion.div>
         </div>
       );
@@ -679,6 +687,7 @@ export default function App() {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 font-sans" dir="rtl">
         <motion.div 
+          key="landing-card"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="max-w-md w-full bg-[#e5e1d8] rounded-[40px] p-10 shadow-2xl text-center border border-[#d1cdc3]"
@@ -763,7 +772,7 @@ export default function App() {
               )}>
                 SYNC: {lastSyncStatus}
               </span>
-              {debugInfo?.gemini && (
+              {debugInfo?.gemini?.status && (
                 <span className={cn(
                   "text-[9px] font-mono uppercase tracking-tighter",
                   debugInfo.gemini.status === "Connected Successfully" ? "text-emerald-600" : "text-red-600"
@@ -781,7 +790,7 @@ export default function App() {
             {debugInfo && (
               <div className="text-[8px] font-mono text-blue-300 max-w-[250px] overflow-hidden text-left" dir="ltr">
                 {debugInfo.error ? (
-                  <span className="text-red-400">ERR: {debugInfo.error}</span>
+                  <span className="text-red-400">ERR: {String(debugInfo.error)}</span>
                 ) : (
                   <span>
                     A: {debugInfo.airtable?.status?.includes("Successfully") ? "OK" : "ERR"} | 
@@ -860,7 +869,9 @@ export default function App() {
                   </Markdown>
                 </div>
                 <div className="text-[9px] mt-2 opacity-40 text-left">
-                  {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {msg.timestamp instanceof Date 
+                    ? msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
             </motion.div>
