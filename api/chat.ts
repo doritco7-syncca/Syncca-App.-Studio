@@ -119,8 +119,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     let response;
     try {
-      const chatHistory = history || [];
-      console.log(`[Chat] History length: ${chatHistory.length}`);
+      // Limit history to last 15 messages to keep it fast and avoid token limits
+      const chatHistory = (history || []).slice(-15);
+      console.log(`[Chat] History length sent: ${chatHistory.length}`);
       
       response = await ai.models.generateContent({
         model: modelToUse,
@@ -130,7 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           temperature: 0.7,
           topP: 0.9,
           topK: 40,
-          maxOutputTokens: 1024,
+          maxOutputTokens: 2048, // Increased to prevent cutting off
         },
       });
       console.log(`[Chat] Gemini responded in ${Date.now() - startTime}ms`);
