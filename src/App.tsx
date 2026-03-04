@@ -214,13 +214,14 @@ export default function App() {
   };
 
   const submitFeedback = async () => {
-    if (!feedbackInput.trim()) return;
+    const finalFeedback = feedbackInput.trim() || userFeedback.trim();
+    if (!finalFeedback) return;
     
     setIsSubmittingFeedback(true);
     try {
       // 1. Update user record (existing logic)
       if (userIdRef.current) {
-        await updateUserField('feedback', feedbackInput);
+        await updateUserField('feedback', finalFeedback);
       }
       
       // 2. Add to conversation logs table (which is more reliable)
@@ -513,7 +514,7 @@ export default function App() {
           conceptsApplied: conceptsFound, 
           timestamp: new Date().toISOString(),
           sessionId: sessionId,
-          feedback:userFeedback
+          feedback: feedbackInput || userFeedback
         })
       });
       
