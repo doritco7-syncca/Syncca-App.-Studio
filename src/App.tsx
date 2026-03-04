@@ -176,13 +176,26 @@ export default function App() {
   }, [currentUser, lexicon]);
 
   const updateUserField = async (field: string, value: string) => {
-    if (!userIdRef.current) return;
+    if (!userIdRef.current) {
+      console.warn(`[FEEDBACK_FLOW] Cannot update ${field}: No userIdRef.current`);
+      return;
+    }
+    console.log(`[FEEDBACK_FLOW] Updating ${field} to: "${value}"`);
     try {
       await fetch(`/api/users/${userIdRef.current}/fields`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ field, value })
       });
+      
+      if (field === 'feedback' && value) {
+        // Also send to dedicated feedbacks table
+        fetch('/api/feedbacks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: currentUser?.username || 'anonymous', content: value })
+        }).catch(err => console.error("Failed to send to dedicated feedback table:", err));
+      }
       console.log(`Updated user field ${field}`);
     } catch (e) {
       console.error(`Failed to update user field ${field}`, e);
@@ -215,16 +228,24 @@ export default function App() {
 
   const submitFeedback = async () => {
     const finalFeedback = feedbackInput.trim() || userFeedback.trim();
+    console.log(`[FEEDBACK_FLOW] submitFeedback triggered. Final: "${finalFeedback}"`);
     if (!finalFeedback) return;
     
     setIsSubmittingFeedback(true);
     try {
-      // 1. Update user record (existing logic)
+      // 1. Update user record
       if (userIdRef.current) {
         await updateUserField('feedback', finalFeedback);
       }
       
-      // 2. Add to conversation logs table (which is more reliable)
+      // 2. Send to dedicated feedbacks table
+      await fetch('/api/feedbacks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: currentUser?.username || 'anonymous', content: finalFeedback })
+      });
+
+      // 3. Add to conversation logs table
       const transcript = messages.map(m => `${m.role === 'user' ? 'User' : 'Syncca'}: ${m.content}`).join('\n\n');
       await logToAirtable(transcript);
       

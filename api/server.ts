@@ -322,23 +322,28 @@ app.post("/api/users/:userId/fields", async (req, res) => {
     
     const { userId } = req.params;
     const { field, value } = req.body;
-    console.log(`Updating field ${field} for user ${userId} to:`, value);
     const tableName = AIRTABLE_SCHEMA.users.tableName;
     const cols = AIRTABLE_SCHEMA.users.columns;
 
-    const airtableField = (cols as any)[field];
-    if (!airtableField) {
-      console.error(`Field mapping failed for: ${field}`);
-      return res.status(400).json({ error: `Field ${field} not found in schema` });
+    // 1. Get the record first to find the actual field names in Airtable
+    const record = await base(tableName).find(userId);
+    if (!record) {
+      return res.status(404).json({ error: "User record not found" });
     }
 
-    console.log(`Updating Airtable user ${userId} field ${airtableField} to: ${value}`);
+    // 2. Find the actual field name (case-insensitive match)
+    const airtableFieldKey = (cols as any)[field] || field;
+    const actualFieldName = Object.keys(record.fields).find(
+      key => key.toLowerCase() === airtableFieldKey.toLowerCase()
+    ) || airtableFieldKey;
+
+    console.log(`[Airtable] Updating user ${userId}: mapping "${field}" -> "${actualFieldName}"`);
 
     await base(tableName).update([
       {
         id: userId,
         fields: {
-          [airtableField]: value
+          [actualFieldName]: value
         }
       }
     ]);
@@ -348,9 +353,7 @@ app.post("/api/users/:userId/fields", async (req, res) => {
     console.error("Error updating user field in Airtable:", error);
     res.status(500).json({ 
       error: "Failed to update field", 
-      message: error.message,
-      airtableError: error.error,
-      statusCode: error.statusCode
+      message: error.message
     });
   }
 });
@@ -452,21 +455,32 @@ app.post("/api/feedbacks", async (req, res) => {
     const tableName = AIRTABLE_SCHEMA.feedbacks.tableName;
     const cols = AIRTABLE_SCHEMA.feedbacks.columns;
     
-    console.log(`Attempting to save feedback for ${email} to table: ${tableName}`);
-    const fields: any = {
-      [cols.content]: content,
-      [cols.userEmail]: email || ""
-    };
+    console.log(`[Feedback] Saving for ${email} to table: ${tableName}`);
+    
+    // Attempt to find the table first to check column names
+    let actualContentCol = cols.content;
+    let actualEmailCol = cols.userEmail;
     
     try {
-      const record = await base(tableName).create([{ fields }]);
-      return res.json({ id: record[0].id, success: true, table: tableName });
-    } catch (e: any) {
-      console.error(`Feedback save failed: ${e.message}`);
-      throw e;
+      const sample = await base(tableName).select({ maxRecords: 1 }).firstPage();
+      if (sample.length > 0) {
+        const existingCols = Object.keys(sample[0].fields);
+        actualContentCol = existingCols.find(c => c.toLowerCase().includes('content') || c.toLowerCase().includes('feedback')) || cols.content;
+        actualEmailCol = existingCols.find(c => c.toLowerCase().includes('email') || c.toLowerCase().includes('user')) || cols.userEmail;
+      }
+    } catch (e) {
+      console.warn("[Feedback] Could not probe table columns, using defaults");
     }
+
+    const fields: any = {
+      [actualContentCol]: content,
+      [actualEmailCol]: email || ""
+    };
+    
+    const record = await base(tableName).create([{ fields }]);
+    res.json({ id: record[0].id, success: true });
   } catch (error: any) {
-    console.error("Feedback error:", error);
+    console.error("[Feedback] Error:", error);
     res.status(500).json({ error: error.message });
   }
 });
