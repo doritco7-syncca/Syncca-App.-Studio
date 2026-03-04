@@ -513,7 +513,7 @@ export default function App() {
           conceptsApplied: conceptsFound, 
           timestamp: new Date().toISOString(),
           sessionId: sessionId,
-          feedback: "בדיקת מערכת - האם זה עובר?"
+          feedback:userFeedback
         })
       });
       
