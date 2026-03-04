@@ -76,7 +76,7 @@ export default function App() {
   const runAirtableTest = async () => {
     try {
       setLastSyncStatus('idle');
-      const res = await fetch('/api/health');
+      const res = await fetch('/api/test-airtable');
       if (!res.ok) {
         const text = await res.text();
         setDebugInfo({ error: `Server returned ${res.status}`, detail: text.substring(0, 100) });
@@ -84,9 +84,9 @@ export default function App() {
       }
       const data = await res.json();
       setDebugInfo(data);
-      console.log("Health Check Results:", data);
+      console.log("Airtable Test Results:", data);
       
-      if (data.airtable?.status === "Connected Successfully" && data.gemini?.status === "Connected Successfully") {
+      if (data.lexicon?.status === "ok" && data.users?.status === "ok" && data.logs?.status === "ok") {
         setLastSyncStatus('success');
       } else {
         setLastSyncStatus('error');
@@ -502,9 +502,11 @@ export default function App() {
       .filter((v, i, a) => a.indexOf(v) === i) // unique
       .join(', ');
 
+    const currentFeedback = feedbackInput || userFeedback;
+    console.log(`[AirtableLog] Syncing session ${sessionId}. Feedback: "${currentFeedback}"`);
+
     try {
       setLastSyncStatus('idle');
-      console.log("Attempting to log to Airtable for user:", finalUserId);
       const response = await fetch('/api/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -514,7 +516,7 @@ export default function App() {
           conceptsApplied: conceptsFound, 
           timestamp: new Date().toISOString(),
           sessionId: sessionId,
-          feedback: feedbackInput || userFeedback
+          feedback: currentFeedback
         })
       });
       
@@ -523,7 +525,11 @@ export default function App() {
         console.error("Airtable logging failed server-side:", errorData);
         setLastSyncStatus('error');
         // Show a small snippet of the error in debugInfo if possible
-        setDebugInfo((prev: any) => ({ ...prev, lastLogError: errorData.message || errorData.details || 'Unknown error' }));
+        setDebugInfo((prev: any) => ({ 
+          ...prev, 
+          lastLogError: errorData.message || errorData.details || 'Unknown error',
+          fieldsSent: errorData.fieldsSent
+        }));
       } else {
         console.log("Airtable logging successful");
         setLastSyncStatus('success');
